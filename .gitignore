@@ -1,0 +1,17 @@
+# Java
+/target
+*.class
+*.jar
+*.war
+*.iml
+
+# Node
+chat-frontend/node_modules
+chat-frontend/.env
+chat-frontend/dist
+
+# OS/Editor
+.DS_Store
+*.log
+.idea/
+.vscode/
