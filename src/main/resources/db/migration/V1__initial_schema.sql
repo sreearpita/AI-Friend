@@ -35,5 +35,5 @@ CREATE TABLE memory (
 
 -- Indexes for common query patterns
 CREATE INDEX idx_conversation_user_id ON conversation(user_id);
-CREATE INDEX idx_message_conversation_created ON message(conversation_id, created_at DESC);
-CREATE INDEX idx_memory_user_updated ON memory(user_id, updated_at DESC);
+CREATE INDEX idx_message_conversation_created ON message(conversation_id, created_at);
+CREATE INDEX idx_memory_user_updated ON memory(user_id, updated_at);
