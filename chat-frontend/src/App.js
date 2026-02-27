@@ -5,10 +5,35 @@ import EmojiEmotionsIcon from '@mui/icons-material/EmojiEmotions';
 import PersonIcon from '@mui/icons-material/Person';
 import axios from 'axios';
 
+const API_BASE = process.env.REACT_APP_API_BASE || 'http://localhost:8080';
+
+function getOrCreateUserId() {
+  let userId = localStorage.getItem('ai_friend_user_id');
+  if (!userId) {
+    userId = crypto.randomUUID();
+    localStorage.setItem('ai_friend_user_id', userId);
+  }
+  return userId;
+}
+
+async function getOrCreateConversationId(userId) {
+  let convId = localStorage.getItem('ai_friend_conversation_id');
+  if (!convId) {
+    const res = await axios.post(`${API_BASE}/api/conversations`, {}, {
+      headers: { 'X-User-Id': userId }
+    });
+    convId = res.data.conversationId;
+    localStorage.setItem('ai_friend_conversation_id', convId);
+  }
+  return convId;
+}
+
 function App() {
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [userId] = useState(() => getOrCreateUserId());
+  const [conversationId, setConversationId] = useState(null);
   const messagesEndRef = useRef(null);
 
   const scrollToBottom = () => {
@@ -19,8 +44,12 @@ function App() {
     scrollToBottom();
   }, [messages]);
 
+  useEffect(() => {
+    getOrCreateConversationId(userId).then(setConversationId).catch(console.error);
+  }, [userId]);
+
   const handleSend = async () => {
-    if (!input.trim()) return;
+    if (!input.trim() || !conversationId) return;
 
     const userMessage = input;
     setInput('');
@@ -28,13 +57,17 @@ function App() {
     setIsLoading(true);
 
     try {
-      const response = await axios.post('http://localhost:8080/chat', userMessage, {
+      const response = await axios.post(`${API_BASE}/api/chat`, {
+        conversationId,
+        message: userMessage
+      }, {
         headers: {
-          'Content-Type': 'text/plain'
+          'Content-Type': 'application/json',
+          'X-User-Id': userId
         }
       });
 
-      setMessages(prev => [...prev, { text: response.data, sender: 'ai' }]);
+      setMessages(prev => [...prev, { text: response.data.reply, sender: 'ai' }]);
     } catch (error) {
       console.error('Error:', error);
       setMessages(prev => [...prev, { text: 'Sorry, there was an error processing your request.', sender: 'ai' }]);
