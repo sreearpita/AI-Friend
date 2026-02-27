@@ -5,10 +5,39 @@ import EmojiEmotionsIcon from '@mui/icons-material/EmojiEmotions';
 import PersonIcon from '@mui/icons-material/Person';
 import axios from 'axios';
 
+const API_BASE = process.env.REACT_APP_API_BASE || 'http://localhost:8080';
+
+function getOrCreateUserId() {
+  let userId = localStorage.getItem('ai_friend_user_id');
+  if (!userId) {
+    userId = crypto.randomUUID();
+    localStorage.setItem('ai_friend_user_id', userId);
+  }
+  return userId;
+}
+
+async function createConversationId(userId) {
+  const res = await axios.post(`${API_BASE}/api/conversations`, {}, {
+    headers: { 'X-User-Id': userId }
+  });
+  const convId = res.data.conversationId;
+  localStorage.setItem('ai_friend_conversation_id', convId);
+  return convId;
+}
+
+async function getOrCreateConversationId(userId) {
+  const stored = localStorage.getItem('ai_friend_conversation_id');
+  if (stored) return stored;
+  return createConversationId(userId);
+}
+
 function App() {
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [initError, setInitError] = useState(false);
+  const [userId] = useState(() => getOrCreateUserId());
+  const [conversationId, setConversationId] = useState(null);
   const messagesEndRef = useRef(null);
 
   const scrollToBottom = () => {
@@ -19,8 +48,17 @@ function App() {
     scrollToBottom();
   }, [messages]);
 
+  useEffect(() => {
+    getOrCreateConversationId(userId)
+      .then(setConversationId)
+      .catch(err => {
+        console.error('Failed to initialize conversation:', err);
+        setInitError(true);
+      });
+  }, [userId]);
+
   const handleSend = async () => {
-    if (!input.trim()) return;
+    if (!input.trim() || !conversationId) return;
 
     const userMessage = input;
     setInput('');
@@ -28,16 +66,32 @@ function App() {
     setIsLoading(true);
 
     try {
-      const response = await axios.post('http://localhost:8080/chat', userMessage, {
+      const response = await axios.post(`${API_BASE}/api/chat`, {
+        conversationId,
+        message: userMessage
+      }, {
         headers: {
-          'Content-Type': 'text/plain'
+          'Content-Type': 'application/json',
+          'X-User-Id': userId
         }
       });
 
-      setMessages(prev => [...prev, { text: response.data, sender: 'ai' }]);
+      setMessages(prev => [...prev, { text: response.data.reply, sender: 'ai' }]);
     } catch (error) {
       console.error('Error:', error);
-      setMessages(prev => [...prev, { text: 'Sorry, there was an error processing your request.', sender: 'ai' }]);
+      // If the conversation was not found (e.g. DB wiped), create a new one and retry
+      if (error.response && error.response.status === 404) {
+        localStorage.removeItem('ai_friend_conversation_id');
+        try {
+          const newConvId = await createConversationId(userId);
+          setConversationId(newConvId);
+          setMessages(prev => [...prev, { text: 'Starting a fresh conversation. Please resend your message.', sender: 'ai' }]);
+        } catch (retryErr) {
+          setMessages(prev => [...prev, { text: 'Failed to reconnect. Please refresh the page.', sender: 'ai' }]);
+        }
+      } else {
+        setMessages(prev => [...prev, { text: 'Sorry, there was an error processing your request.', sender: 'ai' }]);
+      }
     } finally {
       setIsLoading(false);
     }
@@ -49,6 +103,16 @@ function App() {
       handleSend();
     }
   };
+
+  if (initError) {
+    return (
+      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100vh' }}>
+        <Typography color="error">
+          Could not connect to the backend. Please make sure the server is running and refresh.
+        </Typography>
+      </Box>
+    );
+  }
 
   return (
     <Box 
@@ -207,7 +271,7 @@ function App() {
                 onChange={(e) => setInput(e.target.value)}
                 onKeyPress={handleKeyPress}
                 placeholder="Type your message..."
-                disabled={isLoading}
+                disabled={isLoading || !conversationId}
                 variant="outlined"
                 sx={{
                   '& .MuiOutlinedInput-root': {
@@ -218,7 +282,7 @@ function App() {
               <IconButton 
                 color="primary" 
                 onClick={handleSend} 
-                disabled={isLoading || !input.trim()}
+                disabled={isLoading || !input.trim() || !conversationId}
                 sx={{ 
                   bgcolor: 'primary.main', 
                   color: 'white',
@@ -242,3 +306,4 @@ function App() {
 }
 
 export default App;
+
