@@ -7,6 +7,7 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 
 import org.springframework.stereotype.Component;
+import org.springframework.web.cors.CorsUtils;
 import org.springframework.web.servlet.HandlerInterceptor;
 
 @Component
@@ -23,6 +24,10 @@ public class TenantAuthInterceptor implements HandlerInterceptor {
 
     @Override
     public boolean preHandle(HttpServletRequest request, HttpServletResponse response, Object handler) {
+        if (CorsUtils.isPreFlightRequest(request)) {
+            return true;
+        }
+
         String apiKey = request.getHeader(properties.getSecurity().getApiKeyHeader());
         Tenant tenant = tenantAuthService.authenticate(apiKey);
         request.setAttribute(TENANT_ATTRIBUTE, tenant);
