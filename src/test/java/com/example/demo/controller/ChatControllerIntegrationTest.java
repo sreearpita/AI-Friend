@@ -1,19 +1,24 @@
 package com.example.demo.controller;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.containsString;
 import static org.mockito.ArgumentMatchers.anyList;
-import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import java.util.List;
+
 import com.example.demo.model.ModelClient;
 import com.example.demo.model.ModelClientException;
+import com.example.demo.model.ChatPromptMessage;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -56,6 +61,12 @@ class ChatControllerIntegrationTest {
                 .andExpect(jsonPath("$.safetyStatus").value("OK"))
                 .andExpect(jsonPath("$.citations").isArray())
                 .andExpect(jsonPath("$.toolCalls").isArray());
+
+        ArgumentCaptor<List<ChatPromptMessage>> promptCaptor = ArgumentCaptor.captor();
+        verify(modelClient).generate(promptCaptor.capture());
+        assertThat(promptCaptor.getValue())
+                .filteredOn(message -> "user".equals(message.role()) && "What can I eat before my period?".equals(message.content()))
+                .hasSize(1);
     }
 
     @Test

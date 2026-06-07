@@ -102,7 +102,7 @@ public class ChatOrchestratorService {
         SafetyStatus finalStatus = safetyDecision.status();
         if (safetyDecision.shouldCallModel()) {
             try {
-                answer = modelClient.generate(buildPrompt(session, request, citations));
+                answer = modelClient.generate(buildPrompt(session, citations));
             } catch (ModelClientException exception) {
                 logger.warn("Model call failed. tenant={} sessionId={} reason={}",
                         authenticatedTenant.getSlug(),
@@ -152,7 +152,6 @@ public class ChatOrchestratorService {
 
     private List<ChatPromptMessage> buildPrompt(
             ChatSession session,
-            ChatMessageRequest request,
             List<CitationResponse> citations) {
         List<ChatPromptMessage> messages = new ArrayList<>();
         messages.add(new ChatPromptMessage("system", SYSTEM_PROMPT));
@@ -176,7 +175,6 @@ public class ChatOrchestratorService {
             messages.add(new ChatPromptMessage(role, historyMessage.getContent()));
         }
 
-        messages.add(new ChatPromptMessage("user", request.message()));
         return messages;
     }
 

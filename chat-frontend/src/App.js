@@ -16,7 +16,7 @@ function App() {
   const messagesEndRef = useRef(null);
 
   const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    messagesEndRef.current?.scrollIntoView?.({ behavior: "smooth" });
   };
 
   useEffect(() => {
@@ -235,6 +235,7 @@ function App() {
                 }}
               />
               <IconButton 
+                aria-label="Send message"
                 color="primary" 
                 onClick={handleSend} 
                 disabled={isLoading || !input.trim()}

@@ -1,145 +1,192 @@
-# AI Friend Chat Application
+# AI-Friend
 
-A modern chat application that simulates conversations with an AI friend using Spring Boot and React. The AI is powered by Ollama and maintains a consistent persona of a long-time friend from school.
+AI-Friend is evolving from a prototype chat app into a tenant-aware wellness assistant platform. Milestone 1 introduces the backend platform core: versioned chat APIs, API-key auth, persistence, audit events, safety routing, model abstraction, and a React demo client.
 
-## Features
-
-- 🤖 Personalized AI responses with context awareness
-- 💬 Real-time chat interface
-- 🎨 Modern, responsive UI design
-- ⚡ Fast and efficient message handling
-- 🔄 Smooth animations and transitions
-- 📱 Mobile-friendly design
+The current implementation still uses Ollama locally for model calls, with placeholders for future Flowelle tools and curated RAG.
 
 ## Tech Stack
 
 ### Backend
+
 - Java 17
 - Spring Boot 3.2.3
-- Spring AI
-- Ollama AI Integration
+- Spring AI 0.8.1
+- Spring Web, Validation, Data JPA, Actuator
+- H2 for local/test fallback
+- PostgreSQL driver for deployed environments
+- Ollama local model provider
 
 ### Frontend
-- React
-- Material-UI (MUI)
-- Axios
-- Modern CSS with gradients and animations
 
-## Prerequisites
+- React 19
+- Material UI 7
+- Create React App test/build tooling
+- Browser `fetch` for API calls
 
-Before running the application, make sure you have the following installed:
-- Java 17 or higher
-- Node.js and npm
-- Ollama (with mistral model installed)
-- Maven
+## Current API
 
-## Setup and Installation
+### `POST /v1/chat/messages`
 
-### Backend Setup
+Requires tenant authentication with the `X-AIF-Tenant-Key` header.
 
-1. Clone the repository:
-```bash
-git clone <repository-url>
-cd <project-directory>
+Request:
+
+```json
+{
+  "externalUserId": "flowelle-user-1",
+  "sessionId": null,
+  "message": "What can I eat before my period?",
+  "locale": "en-US",
+  "scopes": ["wellness"]
+}
 ```
 
-2. Install dependencies and build the project:
-```bash
-mvn clean install
+Response:
+
+```json
+{
+  "sessionId": "uuid",
+  "answer": "Assistant answer",
+  "safetyStatus": "OK",
+  "citations": [],
+  "toolCalls": [],
+  "createdAt": "2026-06-07T00:00:00Z"
+}
 ```
 
-3. Make sure Ollama is running and the mistral model is installed:
-```bash
-ollama pull mistral
-ollama run mistral
-```
+### Compatibility Endpoint
 
-4. Run the Spring Boot application:
-```bash
-mvn spring-boot:run
-```
+`POST /chat` still accepts a plain text body for the old demo flow. It uses the seeded demo tenant and delegates to the new orchestration path.
 
-The backend will start on `http://localhost:8080`
+## Local Defaults
 
-### Frontend Setup
+The app seeds a local demo tenant by default.
 
-1. Navigate to the frontend directory:
-```bash
-cd chat-frontend
-```
-
-2. Install dependencies:
-```bash
-npm install
-```
-
-3. Start the development server:
-```bash
-npm start
-```
-
-The frontend will be available at `http://localhost:3000`
-
-## Project Structure
-
-```
-.
-├── src/                                # Backend source files
-│   ├── main/
-│   │   ├── java/
-│   │   │   └── com/example/demo/
-│   │   │       ├── controller/        # REST controllers
-│   │   │       └── SpringbootAIApplication.java
-│   │   └── resources/
-│   │       └── application.properties # Application configuration
-│   └── test/                         # Test files
-├── chat-frontend/                    # React frontend
-│   ├── src/
-│   │   ├── App.js                   # Main React component
-│   │   ├── index.js
-│   │   └── index.css                # Global styles
-│   ├── package.json
-│   └── README.md
-└── README.md
-```
+- API key header: `X-AIF-Tenant-Key`
+- Demo key: `dev-aif-demo-key`
+- Backend URL: `http://localhost:8080`
+- Frontend URL: `http://localhost:3000`
+- Ollama URL: `http://localhost:11434`
+- Ollama model: `mistral`
+- Local database: in-memory H2
 
 ## Configuration
 
-### Backend Configuration
-The application.properties file contains important configurations:
+Backend configuration is environment-backed through `src/main/resources/application.properties`.
 
-```properties
-server.port=8080
-spring.ai.ollama.base-url=http://localhost:11434
-spring.ai.ollama.model=mistral
+Common overrides:
+
+```bash
+export SERVER_PORT=8080
+export AIF_OLLAMA_BASE_URL=http://localhost:11434
+export AIF_OLLAMA_MODEL=mistral
+export AIF_ALLOWED_ORIGINS=http://localhost:3000
+export AIF_DEMO_API_KEY=dev-aif-demo-key
+export AIF_DATASOURCE_URL=jdbc:postgresql://localhost:5432/aifriend
+export AIF_DATASOURCE_DRIVER=org.postgresql.Driver
+export AIF_DATASOURCE_USERNAME=aifriend
+export AIF_DATASOURCE_PASSWORD=change-me
+export AIF_JPA_DDL_AUTO=update
 ```
 
-### Frontend Configuration
-The frontend communicates with the backend at `http://localhost:8080`. This can be modified in `App.js` if needed.
+Frontend configuration uses Create React App environment variables:
 
-## Usage
+```bash
+REACT_APP_AIF_API_BASE_URL=http://localhost:8080
+REACT_APP_AIF_TENANT_API_KEY=dev-aif-demo-key
+REACT_APP_AIF_EXTERNAL_USER_ID=demo-user
+```
 
-1. Start both the backend and frontend servers
-2. Open your browser to `http://localhost:3000`
-3. Start chatting with your AI friend!
+Only use the demo tenant key for local development.
 
-## Features in Detail
+## Running Locally
 
-- **Persistent Context**: The AI maintains the context of being your childhood friend from St. Antony's School
-- **Natural Conversations**: Responses are tailored to feel like talking to a real friend
-- **Real-time Feedback**: Visual indicators for message status and AI thinking
-- **Responsive Design**: Works seamlessly on both desktop and mobile devices
+Start Ollama:
 
-## Contributing
+```bash
+ollama pull mistral
+ollama serve
+```
 
-Contributions are welcome! Please feel free to submit a Pull Request.
+Start the backend:
+
+```bash
+./mvnw spring-boot:run
+```
+
+Start the frontend:
+
+```bash
+cd chat-frontend
+npm install
+npm start
+```
+
+Open `http://localhost:3000`.
+
+## Tests
+
+Backend:
+
+```bash
+./mvnw test
+```
+
+Frontend:
+
+```bash
+cd chat-frontend
+CI=true npm test -- --watchAll=false
+```
+
+Automated backend tests mock the model client and do not require a live Ollama instance.
+
+## Project Structure
+
+```text
+.
+├── plan/
+│   ├── master-plan.md
+│   └── milestone1-plan.md
+├── src/main/java/com/example/demo/
+│   ├── config/             # Environment-backed app and web config
+│   ├── controller/         # HTTP API
+│   ├── dto/                # Request/response contracts
+│   ├── exception/          # Structured API errors
+│   ├── model/              # JPA entities and domain records
+│   ├── repository/         # Spring Data repositories
+│   ├── security/           # Tenant API-key auth and demo seeding
+│   └── service/            # Chat orchestration, model, safety, audit placeholders
+├── src/test/java/          # Backend integration tests
+└── chat-frontend/          # React demo client
+```
+
+## Milestone 1 Status
+
+Implemented:
+
+- Versioned `/v1/chat/messages` endpoint
+- Legacy `/chat` wrapper
+- Tenant API-key auth for `/v1/**`
+- Hashed API key storage
+- Demo tenant seeding
+- JPA entities for tenants, API keys, sessions, messages, and audit events
+- H2 local/test fallback with PostgreSQL-ready configuration
+- Chat orchestration service with session reuse and bounded history
+- Safety red-flag routing and model fallback response
+- Structured API errors
+- React demo client updated to the v1 API
+- Backend and frontend smoke tests
+
+Still placeholder or future work:
+
+- Flowelle host-tool callbacks
+- Curated RAG and pgvector embeddings
+- Production migrations instead of Hibernate `ddl-auto`
+- Rate limits, quotas, and deeper tenant administration
+- Streaming responses
+- Production deployment packaging
 
 ## License
 
-This project is licensed under the MIT License - see the LICENSE file for details.
-
-## Acknowledgments
-
-- Thanks to the Spring AI team for their excellent framework
-- Thanks to the Ollama team for their AI model support
-- Material-UI for the beautiful React components 
+This project is licensed under the MIT License. See `LICENSE` for details.

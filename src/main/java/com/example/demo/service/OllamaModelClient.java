@@ -7,6 +7,7 @@ import com.example.demo.model.ModelClient;
 import com.example.demo.model.ModelClientException;
 
 import org.springframework.ai.chat.ChatResponse;
+import org.springframework.ai.chat.messages.AssistantMessage;
 import org.springframework.ai.chat.messages.Message;
 import org.springframework.ai.chat.messages.SystemMessage;
 import org.springframework.ai.chat.messages.UserMessage;
@@ -38,6 +39,9 @@ public class OllamaModelClient implements ModelClient {
     private Message toSpringAiMessage(ChatPromptMessage message) {
         if ("system".equalsIgnoreCase(message.role())) {
             return new SystemMessage(message.content());
+        }
+        if ("assistant".equalsIgnoreCase(message.role())) {
+            return new AssistantMessage(message.content());
         }
         return new UserMessage(message.content());
     }
