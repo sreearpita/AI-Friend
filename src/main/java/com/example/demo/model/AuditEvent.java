@@ -54,4 +54,12 @@ public class AuditEvent {
             createdAt = Instant.now();
         }
     }
+
+    public String getEventType() {
+        return eventType;
+    }
+
+    public String getMetadataJson() {
+        return metadataJson;
+    }
 }

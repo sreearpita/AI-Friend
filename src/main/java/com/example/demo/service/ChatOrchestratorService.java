@@ -21,6 +21,7 @@ import com.example.demo.model.ModelClientException;
 import com.example.demo.model.SafetyDecision;
 import com.example.demo.model.SafetyStatus;
 import com.example.demo.model.Tenant;
+import com.example.demo.model.ToolExecutionResult;
 import com.example.demo.repository.ChatMessageRepository;
 import com.example.demo.repository.ChatSessionRepository;
 import com.example.demo.repository.TenantRepository;
@@ -82,8 +83,6 @@ public class ChatOrchestratorService {
 
         Tenant tenant = tenantRepository.getReferenceById(authenticatedTenant.getId());
         ChatSession session = resolveSession(tenant, request);
-        List<CitationResponse> citations = retrievalService.findRelevantCitations(request.message());
-        List<ToolCallResponse> toolCalls = toolRegistryService.plannedToolCalls(request.message());
         SafetyDecision safetyDecision = safetyService.evaluate(request.message());
 
         auditService.record(tenant, request.externalUserId(), session.getId(), "chat.message.received", Map.of(
@@ -98,11 +97,19 @@ public class ChatOrchestratorService {
                 request.message(),
                 safetyDecision.status()));
 
+        List<CitationResponse> citations = List.of();
+        ToolExecutionResult toolExecutionResult = ToolExecutionResult.empty();
+        if (safetyDecision.shouldCallModel()) {
+            citations = retrievalService.findRelevantCitations(request.message());
+            toolExecutionResult = toolRegistryService.executeTools(tenant, session, request);
+        }
+        List<ToolCallResponse> toolCalls = toolExecutionResult.toolCalls();
+
         String answer;
         SafetyStatus finalStatus = safetyDecision.status();
         if (safetyDecision.shouldCallModel()) {
             try {
-                answer = modelClient.generate(buildPrompt(session, citations));
+                answer = modelClient.generate(buildPrompt(session, citations, toolExecutionResult.promptContexts()));
             } catch (ModelClientException exception) {
                 logger.warn("Model call failed. tenant={} sessionId={} reason={}",
                         authenticatedTenant.getSlug(),
@@ -126,7 +133,10 @@ public class ChatOrchestratorService {
                 "answerLength", answer.length(),
                 "safetyStatus", finalStatus.name(),
                 "citationCount", citations.size(),
-                "toolCallCount", toolCalls.size()));
+                "toolCallCount", toolCalls.size(),
+                "toolStatuses", toolCalls.stream()
+                        .map(toolCall -> toolCall.name() + ":" + toolCall.status())
+                        .toList()));
 
         return new ChatMessageResponse(
                 session.getId(),
@@ -152,7 +162,8 @@ public class ChatOrchestratorService {
 
     private List<ChatPromptMessage> buildPrompt(
             ChatSession session,
-            List<CitationResponse> citations) {
+            List<CitationResponse> citations,
+            List<String> toolPromptContexts) {
         List<ChatPromptMessage> messages = new ArrayList<>();
         messages.add(new ChatPromptMessage("system", SYSTEM_PROMPT));
 
@@ -164,6 +175,12 @@ public class ChatOrchestratorService {
 
         if (!citations.isEmpty()) {
             messages.add(new ChatPromptMessage("system", "Use these curated references when relevant: " + citations));
+        }
+
+        if (!toolPromptContexts.isEmpty()) {
+            messages.add(new ChatPromptMessage(
+                    "system",
+                    "Approved host-app facts for this turn:\n" + String.join("\n", toolPromptContexts)));
         }
 
         List<ChatMessage> history = chatMessageRepository.findBySessionIdOrderByCreatedAtDesc(

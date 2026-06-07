@@ -9,6 +9,7 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 public class AiFriendProperties {
     private final Security security = new Security();
     private final Chat chat = new Chat();
+    private final Tools tools = new Tools();
 
     public Security getSecurity() {
         return security;
@@ -16,6 +17,10 @@ public class AiFriendProperties {
 
     public Chat getChat() {
         return chat;
+    }
+
+    public Tools getTools() {
+        return tools;
     }
 
     public static class Security {
@@ -93,6 +98,45 @@ public class AiFriendProperties {
 
         public void setMaxMessageLength(int maxMessageLength) {
             this.maxMessageLength = maxMessageLength;
+        }
+    }
+
+    public static class Tools {
+        private boolean seedDemoTools = false;
+        private String demoCallbackUrl = "http://localhost:8090/aif/tools";
+        private String demoSigningSecret = "dev-aif-tool-secret";
+        private int requestTimeoutMs = 2000;
+
+        public boolean isSeedDemoTools() {
+            return seedDemoTools;
+        }
+
+        public void setSeedDemoTools(boolean seedDemoTools) {
+            this.seedDemoTools = seedDemoTools;
+        }
+
+        public String getDemoCallbackUrl() {
+            return demoCallbackUrl;
+        }
+
+        public void setDemoCallbackUrl(String demoCallbackUrl) {
+            this.demoCallbackUrl = demoCallbackUrl;
+        }
+
+        public String getDemoSigningSecret() {
+            return demoSigningSecret;
+        }
+
+        public void setDemoSigningSecret(String demoSigningSecret) {
+            this.demoSigningSecret = demoSigningSecret;
+        }
+
+        public int getRequestTimeoutMs() {
+            return requestTimeoutMs;
+        }
+
+        public void setRequestTimeoutMs(int requestTimeoutMs) {
+            this.requestTimeoutMs = requestTimeoutMs;
         }
     }
 }

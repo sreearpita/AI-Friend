@@ -1,8 +1,8 @@
 # AI-Friend
 
-AI-Friend is evolving from a prototype chat app into a tenant-aware wellness assistant platform. Milestone 1 introduces the backend platform core: versioned chat APIs, API-key auth, persistence, audit events, safety routing, model abstraction, and a React demo client.
+AI-Friend is evolving from a prototype chat app into a tenant-aware wellness assistant platform. The backend core includes versioned chat APIs, API-key auth, persistence, audit events, safety routing, model abstraction, signed host-tool callbacks, and a React demo client.
 
-The current implementation still uses Ollama locally for model calls, with placeholders for future Flowelle tools and curated RAG.
+The current implementation still uses Ollama locally for model calls. Flowelle-style host tools are supported through signed callback contracts, while curated RAG remains future work.
 
 ## Tech Stack
 
@@ -15,6 +15,7 @@ The current implementation still uses Ollama locally for model calls, with place
 - H2 for local/test fallback
 - PostgreSQL driver for deployed environments
 - Ollama local model provider
+- Signed host-tool callbacks for host-owned facts
 
 ### Frontend
 
@@ -87,6 +88,10 @@ export AIF_DATASOURCE_DRIVER=org.postgresql.Driver
 export AIF_DATASOURCE_USERNAME=aifriend
 export AIF_DATASOURCE_PASSWORD=change-me
 export AIF_JPA_DDL_AUTO=update
+export AIF_SEED_DEMO_TOOLS=false
+export AIF_DEMO_TOOL_CALLBACK_URL=http://localhost:8090/aif/tools
+export AIF_DEMO_TOOL_SIGNING_SECRET=dev-aif-tool-secret
+export AIF_TOOL_REQUEST_TIMEOUT_MS=2000
 ```
 
 Frontend configuration uses Create React App environment variables:
@@ -98,6 +103,30 @@ REACT_APP_AIF_EXTERNAL_USER_ID=demo-user
 ```
 
 Only use the demo tenant key for local development.
+
+## Host Tool Callbacks
+
+AI-Friend does not store raw Flowelle health data. When a user asks for host-owned facts, such as next period date, cycle length, food, diet, or exercise suggestions, AI-Friend can call tenant-configured host tools and inject only approved returned summaries/facts into the model prompt for that turn.
+
+Current deterministic tool intents:
+
+- `cycle-summary`: triggered by next-period and cycle-length prompts.
+- `user-preferences`: triggered by food, diet, exercise, preference, and lifestyle prompts.
+
+Host tool callbacks are signed with HMAC-SHA256 over:
+
+```text
+timestamp + "." + jsonRequestBody
+```
+
+Callback requests include:
+
+- `X-AIF-Tenant`
+- `X-AIF-Timestamp`
+- `X-AIF-Signature`
+- `X-AIF-Request-Id`
+
+Tool calls are tenant-scoped and request-scope checked. If a tool is missing, disabled, denied by scope, times out, or fails, the chat flow continues with a safe `SKIPPED` or `FAILED` tool call summary and general model context.
 
 ## Running Locally
 
@@ -156,12 +185,12 @@ Automated backend tests mock the model client and do not require a live Ollama i
 │   ├── model/              # JPA entities and domain records
 │   ├── repository/         # Spring Data repositories
 │   ├── security/           # Tenant API-key auth and demo seeding
-│   └── service/            # Chat orchestration, model, safety, audit placeholders
+│   └── service/            # Chat orchestration, model, safety, audit, host tools
 ├── src/test/java/          # Backend integration tests
 └── chat-frontend/          # React demo client
 ```
 
-## Milestone 1 Status
+## Platform Status
 
 Implemented:
 
@@ -174,13 +203,15 @@ Implemented:
 - H2 local/test fallback with PostgreSQL-ready configuration
 - Chat orchestration service with session reuse and bounded history
 - Safety red-flag routing and model fallback response
+- Tenant-configured signed host-tool callbacks
+- Scope checks and safe tool skip/failure behavior
 - Structured API errors
 - React demo client updated to the v1 API
 - Backend and frontend smoke tests
 
 Still placeholder or future work:
 
-- Flowelle host-tool callbacks
+- Full Flowelle service integration
 - Curated RAG and pgvector embeddings
 - Production migrations instead of Hibernate `ddl-auto`
 - Rate limits, quotas, and deeper tenant administration

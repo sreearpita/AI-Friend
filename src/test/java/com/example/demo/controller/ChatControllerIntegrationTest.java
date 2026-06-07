@@ -3,6 +3,7 @@ package com.example.demo.controller;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.containsString;
 import static org.mockito.ArgumentMatchers.anyList;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -14,10 +15,22 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 
+import com.example.demo.dto.HostToolRequest;
+import com.example.demo.dto.HostToolResponse;
+import com.example.demo.model.AuditEvent;
 import com.example.demo.model.ModelClient;
 import com.example.demo.model.ModelClientException;
 import com.example.demo.model.ChatPromptMessage;
+import com.example.demo.model.HostToolClientException;
+import com.example.demo.model.Tenant;
+import com.example.demo.model.TenantToolConfig;
+import com.example.demo.repository.AuditEventRepository;
+import com.example.demo.repository.TenantRepository;
+import com.example.demo.repository.TenantToolConfigRepository;
+import com.example.demo.service.HostToolClient;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
 import org.junit.jupiter.api.BeforeEach;
@@ -43,11 +56,25 @@ class ChatControllerIntegrationTest {
     @Autowired
     private ObjectMapper objectMapper;
 
+    @Autowired
+    private TenantRepository tenantRepository;
+
+    @Autowired
+    private TenantToolConfigRepository tenantToolConfigRepository;
+
+    @Autowired
+    private AuditEventRepository auditEventRepository;
+
     @MockBean
     private ModelClient modelClient;
 
+    @MockBean
+    private HostToolClient hostToolClient;
+
     @BeforeEach
     void setUp() {
+        auditEventRepository.deleteAll();
+        tenantToolConfigRepository.deleteAll();
         when(modelClient.generate(anyList())).thenReturn("A grounded wellness answer.");
     }
 
@@ -222,6 +249,97 @@ class ChatControllerIntegrationTest {
     }
 
     @Test
+    void authorizedHostToolAddsToolCallAndPromptContext() throws Exception {
+        seedToolConfig("cycle-summary", Set.of("cycle:read"));
+        when(hostToolClient.invoke(any(TenantToolConfig.class), any(HostToolRequest.class)))
+                .thenReturn(new HostToolResponse(
+                        "cycle-summary",
+                        "OK",
+                        "Predicted next period starts 2026-06-20.",
+                        Map.of("nextPeriodStart", "2026-06-20"),
+                        "Used your Flowelle cycle summary."));
+
+        mockMvc.perform(post("/v1/chat/messages")
+                        .header("X-AIF-Tenant-Key", API_KEY)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "externalUserId": "flowelle-user-1",
+                                  "message": "When is my next period?",
+                                  "scopes": ["cycle:read"]
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.toolCalls[0].name").value("cycle-summary"))
+                .andExpect(jsonPath("$.toolCalls[0].status").value("COMPLETED"))
+                .andExpect(jsonPath("$.toolCalls[0].summary").value("Used your Flowelle cycle summary."));
+
+        ArgumentCaptor<HostToolRequest> requestCaptor = ArgumentCaptor.captor();
+        verify(hostToolClient).invoke(any(TenantToolConfig.class), requestCaptor.capture());
+        assertThat(requestCaptor.getValue().parameters()).containsEntry("intent", "cycle-summary");
+        assertThat(requestCaptor.getValue().parameters().values())
+                .doesNotContain("When is my next period?");
+
+        ArgumentCaptor<List<ChatPromptMessage>> promptCaptor = ArgumentCaptor.captor();
+        verify(modelClient).generate(promptCaptor.capture());
+        assertThat(promptCaptor.getValue())
+                .anySatisfy(message -> {
+                    assertThat(message.role()).isEqualTo("system");
+                    assertThat(message.content()).contains("Approved host-app facts", "nextPeriodStart", "2026-06-20");
+                });
+
+        assertThat(auditEventRepository.findAll())
+                .extracting(AuditEvent::getMetadataJson)
+                .anySatisfy(metadata -> assertThat(metadata).contains("cycle-summary:COMPLETED"))
+                .noneSatisfy(metadata -> assertThat(metadata).contains("2026-06-20"));
+    }
+
+    @Test
+    void hostToolWithoutRequiredScopeIsSkipped() throws Exception {
+        seedToolConfig("cycle-summary", Set.of("cycle:read"));
+
+        mockMvc.perform(post("/v1/chat/messages")
+                        .header("X-AIF-Tenant-Key", API_KEY)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "externalUserId": "flowelle-user-1",
+                                  "message": "When is my next period?",
+                                  "scopes": ["wellness"]
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.toolCalls[0].name").value("cycle-summary"))
+                .andExpect(jsonPath("$.toolCalls[0].status").value("SKIPPED"));
+
+        verify(hostToolClient, never()).invoke(any(TenantToolConfig.class), any(HostToolRequest.class));
+    }
+
+    @Test
+    void hostToolFailureReturnsFailedToolCallAndContinues() throws Exception {
+        seedToolConfig("user-preferences", Set.of("preferences:read"));
+        when(hostToolClient.invoke(any(TenantToolConfig.class), any(HostToolRequest.class)))
+                .thenThrow(new HostToolClientException("down", new RuntimeException("down")));
+
+        mockMvc.perform(post("/v1/chat/messages")
+                        .header("X-AIF-Tenant-Key", API_KEY)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "externalUserId": "flowelle-user-1",
+                                  "message": "Suggest food and exercise for PMS",
+                                  "scopes": ["preferences:read"]
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.answer").value("A grounded wellness answer."))
+                .andExpect(jsonPath("$.toolCalls[0].name").value("user-preferences"))
+                .andExpect(jsonPath("$.toolCalls[0].status").value("FAILED"));
+
+        verify(modelClient).generate(anyList());
+    }
+
+    @Test
     void chatAllowsCorsPreflightWithoutApiKey() throws Exception {
         mockMvc.perform(options("/v1/chat/messages")
                         .header(HttpHeaders.ORIGIN, "http://localhost:3000")
@@ -229,5 +347,16 @@ class ChatControllerIntegrationTest {
                         .header(HttpHeaders.ACCESS_CONTROL_REQUEST_HEADERS, "content-type,x-aif-tenant-key"))
                 .andExpect(status().isOk())
                 .andExpect(header().string(HttpHeaders.ACCESS_CONTROL_ALLOW_ORIGIN, "http://localhost:3000"));
+    }
+
+    private void seedToolConfig(String name, Set<String> allowedScopes) {
+        Tenant tenant = tenantRepository.findBySlug("demo").orElseThrow();
+        tenantToolConfigRepository.save(new TenantToolConfig(
+                tenant,
+                name,
+                "https://flowelle.example/aif/tools/" + name,
+                "test-secret",
+                allowedScopes,
+                true));
     }
 }
