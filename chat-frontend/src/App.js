@@ -3,12 +3,16 @@ import { Container, Paper, TextField, IconButton, Typography, Box, Avatar, Circu
 import SendIcon from '@mui/icons-material/Send';
 import EmojiEmotionsIcon from '@mui/icons-material/EmojiEmotions';
 import PersonIcon from '@mui/icons-material/Person';
-import axios from 'axios';
+
+const API_BASE_URL = process.env.REACT_APP_AIF_API_BASE_URL || 'http://localhost:8080';
+const TENANT_API_KEY = process.env.REACT_APP_AIF_TENANT_API_KEY || 'dev-aif-demo-key';
+const EXTERNAL_USER_ID = process.env.REACT_APP_AIF_EXTERNAL_USER_ID || 'demo-user';
 
 function App() {
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [sessionId, setSessionId] = useState(null);
   const messagesEndRef = useRef(null);
 
   const scrollToBottom = () => {
@@ -28,13 +32,28 @@ function App() {
     setIsLoading(true);
 
     try {
-      const response = await axios.post('http://localhost:8080/chat', userMessage, {
+      const response = await fetch(`${API_BASE_URL}/v1/chat/messages`, {
+        method: 'POST',
         headers: {
-          'Content-Type': 'text/plain'
-        }
+          'Content-Type': 'application/json',
+          'X-AIF-Tenant-Key': TENANT_API_KEY
+        },
+        body: JSON.stringify({
+          externalUserId: EXTERNAL_USER_ID,
+          sessionId,
+          message: userMessage,
+          locale: navigator.language || 'en-US',
+          scopes: ['demo']
+        })
       });
 
-      setMessages(prev => [...prev, { text: response.data, sender: 'ai' }]);
+      if (!response.ok) {
+        throw new Error(`Chat request failed with status ${response.status}`);
+      }
+
+      const data = await response.json();
+      setSessionId(data.sessionId);
+      setMessages(prev => [...prev, { text: data.answer, sender: 'ai' }]);
     } catch (error) {
       console.error('Error:', error);
       setMessages(prev => [...prev, { text: 'Sorry, there was an error processing your request.', sender: 'ai' }]);
@@ -43,7 +62,7 @@ function App() {
     }
   };
 
-  const handleKeyPress = (e) => {
+  const handleKeyDown = (e) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       handleSend();
@@ -205,7 +224,7 @@ function App() {
                 maxRows={4}
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
-                onKeyPress={handleKeyPress}
+                onKeyDown={handleKeyDown}
                 placeholder="Type your message..."
                 disabled={isLoading}
                 variant="outlined"

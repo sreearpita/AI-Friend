@@ -1,8 +1,8 @@
 import { render, screen } from '@testing-library/react';
 import App from './App';
 
-test('renders learn react link', () => {
+test('renders chat app shell', () => {
   render(<App />);
-  const linkElement = screen.getByText(/learn react/i);
-  expect(linkElement).toBeInTheDocument();
+  expect(screen.getByText(/AI Friend/i)).toBeInTheDocument();
+  expect(screen.getByText(/Start a conversation with your AI friend/i)).toBeInTheDocument();
 });
