@@ -16,6 +16,7 @@ public class HostToolSigner {
     public static final String TIMESTAMP_HEADER = "X-AIF-Timestamp";
     public static final String SIGNATURE_HEADER = "X-AIF-Signature";
     public static final String REQUEST_ID_HEADER = "X-AIF-Request-Id";
+    public static final String KEY_ID_HEADER = "X-AIF-Key-Id";
 
     public String sign(String timestamp, String body, String signingSecret) {
         try {

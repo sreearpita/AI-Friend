@@ -62,6 +62,7 @@ class RestTemplateHostToolClientTest {
         server.expect(requestTo("https://flowelle.example/aif/tools/cycle-summary"))
                 .andExpect(method(HttpMethod.POST))
                 .andExpect(header(HostToolSigner.TENANT_HEADER, "demo"))
+                .andExpect(header(HostToolSigner.KEY_ID_HEADER, "dev-v1"))
                 .andExpect(callbackRequest -> {
                     String body = ((MockClientHttpRequest) callbackRequest).getBodyAsString();
                     String timestamp = callbackRequest.getHeaders().getFirst(HostToolSigner.TIMESTAMP_HEADER);

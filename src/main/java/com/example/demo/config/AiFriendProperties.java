@@ -105,6 +105,7 @@ public class AiFriendProperties {
         private boolean seedDemoTools = false;
         private String demoCallbackUrl = "http://localhost:8090/aif/tools";
         private String demoSigningSecret = "dev-aif-tool-secret";
+        private String demoSigningKeyId = "dev-v1";
         private int requestTimeoutMs = 2000;
 
         public boolean isSeedDemoTools() {
@@ -129,6 +130,14 @@ public class AiFriendProperties {
 
         public void setDemoSigningSecret(String demoSigningSecret) {
             this.demoSigningSecret = demoSigningSecret;
+        }
+
+        public String getDemoSigningKeyId() {
+            return demoSigningKeyId;
+        }
+
+        public void setDemoSigningKeyId(String demoSigningKeyId) {
+            this.demoSigningKeyId = demoSigningKeyId;
         }
 
         public int getRequestTimeoutMs() {

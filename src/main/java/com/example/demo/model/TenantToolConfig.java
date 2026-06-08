@@ -38,6 +38,9 @@ public class TenantToolConfig {
     @Column(nullable = false, length = 500)
     private String signingSecret;
 
+    @Column(nullable = false, length = 80)
+    private String signingKeyId = "dev-v1";
+
     @ElementCollection(fetch = FetchType.EAGER)
     @CollectionTable(name = "tenant_tool_allowed_scopes", joinColumns = @JoinColumn(name = "tool_config_id"))
     @Column(name = "scope", nullable = false, length = 80)
@@ -57,14 +60,26 @@ public class TenantToolConfig {
             String name,
             String callbackUrl,
             String signingSecret,
+            String signingKeyId,
             Set<String> allowedScopes,
             boolean active) {
         this.tenant = tenant;
         this.name = name;
         this.callbackUrl = callbackUrl;
         this.signingSecret = signingSecret;
+        this.signingKeyId = signingKeyId;
         this.allowedScopes = allowedScopes == null ? new HashSet<>() : new HashSet<>(allowedScopes);
         this.active = active;
+    }
+
+    public TenantToolConfig(
+            Tenant tenant,
+            String name,
+            String callbackUrl,
+            String signingSecret,
+            Set<String> allowedScopes,
+            boolean active) {
+        this(tenant, name, callbackUrl, signingSecret, "dev-v1", allowedScopes, active);
     }
 
     @PrePersist
@@ -92,6 +107,10 @@ public class TenantToolConfig {
 
     public String getSigningSecret() {
         return signingSecret;
+    }
+
+    public String getSigningKeyId() {
+        return signingKeyId;
     }
 
     public Set<String> getAllowedScopes() {

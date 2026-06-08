@@ -18,7 +18,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
-import com.example.demo.dto.HostToolRequest;
 import com.example.demo.dto.HostToolResponse;
 import com.example.demo.model.AuditEvent;
 import com.example.demo.model.ModelClient;
@@ -30,7 +29,7 @@ import com.example.demo.model.TenantToolConfig;
 import com.example.demo.repository.AuditEventRepository;
 import com.example.demo.repository.TenantRepository;
 import com.example.demo.repository.TenantToolConfigRepository;
-import com.example.demo.service.HostToolClient;
+import com.example.demo.service.FlowelleToolClient;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
 import org.junit.jupiter.api.BeforeEach;
@@ -69,7 +68,7 @@ class ChatControllerIntegrationTest {
     private ModelClient modelClient;
 
     @MockBean
-    private HostToolClient hostToolClient;
+    private FlowelleToolClient flowelleToolClient;
 
     @BeforeEach
     void setUp() {
@@ -251,7 +250,12 @@ class ChatControllerIntegrationTest {
     @Test
     void authorizedHostToolAddsToolCallAndPromptContext() throws Exception {
         seedToolConfig("cycle-summary", Set.of("cycle:read"));
-        when(hostToolClient.invoke(any(TenantToolConfig.class), any(HostToolRequest.class)))
+        when(flowelleToolClient.fetchCycleSummary(
+                any(Tenant.class),
+                any(),
+                any(),
+                any(TenantToolConfig.class),
+                any()))
                 .thenReturn(new HostToolResponse(
                         "cycle-summary",
                         "OK",
@@ -273,12 +277,6 @@ class ChatControllerIntegrationTest {
                 .andExpect(jsonPath("$.toolCalls[0].name").value("cycle-summary"))
                 .andExpect(jsonPath("$.toolCalls[0].status").value("COMPLETED"))
                 .andExpect(jsonPath("$.toolCalls[0].summary").value("Used your Flowelle cycle summary."));
-
-        ArgumentCaptor<HostToolRequest> requestCaptor = ArgumentCaptor.captor();
-        verify(hostToolClient).invoke(any(TenantToolConfig.class), requestCaptor.capture());
-        assertThat(requestCaptor.getValue().parameters()).containsEntry("intent", "cycle-summary");
-        assertThat(requestCaptor.getValue().parameters().values())
-                .doesNotContain("When is my next period?");
 
         ArgumentCaptor<List<ChatPromptMessage>> promptCaptor = ArgumentCaptor.captor();
         verify(modelClient).generate(promptCaptor.capture());
@@ -312,13 +310,23 @@ class ChatControllerIntegrationTest {
                 .andExpect(jsonPath("$.toolCalls[0].name").value("cycle-summary"))
                 .andExpect(jsonPath("$.toolCalls[0].status").value("SKIPPED"));
 
-        verify(hostToolClient, never()).invoke(any(TenantToolConfig.class), any(HostToolRequest.class));
+        verify(flowelleToolClient, never()).fetchCycleSummary(
+                any(Tenant.class),
+                any(),
+                any(),
+                any(TenantToolConfig.class),
+                any());
     }
 
     @Test
     void hostToolFailureReturnsFailedToolCallAndContinues() throws Exception {
         seedToolConfig("user-preferences", Set.of("preferences:read"));
-        when(hostToolClient.invoke(any(TenantToolConfig.class), any(HostToolRequest.class)))
+        when(flowelleToolClient.fetchUserPreferences(
+                any(Tenant.class),
+                any(),
+                any(),
+                any(TenantToolConfig.class),
+                any()))
                 .thenThrow(new HostToolClientException("down", new RuntimeException("down")));
 
         mockMvc.perform(post("/v1/chat/messages")

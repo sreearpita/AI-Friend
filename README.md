@@ -91,6 +91,7 @@ export AIF_JPA_DDL_AUTO=update
 export AIF_SEED_DEMO_TOOLS=false
 export AIF_DEMO_TOOL_CALLBACK_URL=http://localhost:8090/aif/tools
 export AIF_DEMO_TOOL_SIGNING_SECRET=dev-aif-tool-secret
+export AIF_DEMO_TOOL_SIGNING_KEY_ID=dev-v1
 export AIF_TOOL_REQUEST_TIMEOUT_MS=2000
 ```
 
@@ -113,6 +114,18 @@ Current deterministic tool intents:
 - `cycle-summary`: triggered by next-period and cycle-length prompts.
 - `user-preferences`: triggered by food, diet, exercise, preference, and lifestyle prompts.
 
+Flowelle contract assumptions are based on the current `sreearpita/Flowelle` repository:
+
+- `auth-service` runs at `http://localhost:8081/api` and owns JWT auth, profile, and user preferences.
+- `cycles-service` runs at `http://localhost:8082/api` and owns cycle tracking and predictions.
+- Existing Flowelle endpoints include `GET /api/cycles/predictions?userId={id}`, `GET /api/cycles/current?userId={id}`, and `GET /auth/me`.
+- Dedicated AI-Friend server-to-server callback endpoints are not checked in yet, so AI-Friend defines typed callback contracts that Flowelle can implement.
+
+Typed Flowelle tool contracts in AI-Friend:
+
+- `FlowelleCycleSummaryRequest` / `FlowelleCycleSummaryResponse`
+- `FlowelleUserPreferencesRequest` / `FlowelleUserPreferencesResponse`
+
 Host tool callbacks are signed with HMAC-SHA256 over:
 
 ```text
@@ -125,8 +138,11 @@ Callback requests include:
 - `X-AIF-Timestamp`
 - `X-AIF-Signature`
 - `X-AIF-Request-Id`
+- `X-AIF-Key-Id`
 
-Tool calls are tenant-scoped and request-scope checked. If a tool is missing, disabled, denied by scope, times out, or fails, the chat flow continues with a safe `SKIPPED` or `FAILED` tool call summary and general model context.
+Tool calls are tenant-scoped and request-scope checked. `cycle-summary` requires a configured scope such as `cycle:read`; `user-preferences` requires a configured scope such as `preferences:read`. If a tool is missing, disabled, denied by scope, times out, or fails, the chat flow continues with a safe `SKIPPED` or `FAILED` tool call summary and general model context.
+
+`TenantToolConfig.signingSecret` is currently suitable for local/dev use only. Production should source callback secrets from a secret manager or encrypted column and use `signingKeyId` for key rotation.
 
 ## Running Locally
 
@@ -204,6 +220,7 @@ Implemented:
 - Chat orchestration service with session reuse and bounded history
 - Safety red-flag routing and model fallback response
 - Tenant-configured signed host-tool callbacks
+- Typed Flowelle cycle summary and user preference contracts
 - Scope checks and safe tool skip/failure behavior
 - Structured API errors
 - React demo client updated to the v1 API
@@ -211,7 +228,7 @@ Implemented:
 
 Still placeholder or future work:
 
-- Full Flowelle service integration
+- Flowelle-side implementation of AI-Friend callback endpoints
 - Curated RAG and pgvector embeddings
 - Production migrations instead of Hibernate `ddl-auto`
 - Rate limits, quotas, and deeper tenant administration

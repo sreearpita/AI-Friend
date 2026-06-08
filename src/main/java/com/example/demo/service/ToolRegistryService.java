@@ -6,11 +6,9 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
-import java.util.UUID;
 import java.util.stream.Collectors;
 
 import com.example.demo.dto.ChatMessageRequest;
-import com.example.demo.dto.HostToolRequest;
 import com.example.demo.dto.HostToolResponse;
 import com.example.demo.dto.ToolCallResponse;
 import com.example.demo.model.ChatSession;
@@ -25,15 +23,12 @@ import org.springframework.util.StringUtils;
 
 @Service
 public class ToolRegistryService {
-    private static final String CYCLE_SUMMARY_TOOL = "cycle-summary";
-    private static final String USER_PREFERENCES_TOOL = "user-preferences";
-
     private final TenantToolConfigRepository tenantToolConfigRepository;
-    private final HostToolClient hostToolClient;
+    private final FlowelleToolClient flowelleToolClient;
 
-    public ToolRegistryService(TenantToolConfigRepository tenantToolConfigRepository, HostToolClient hostToolClient) {
+    public ToolRegistryService(TenantToolConfigRepository tenantToolConfigRepository, FlowelleToolClient flowelleToolClient) {
         this.tenantToolConfigRepository = tenantToolConfigRepository;
-        this.hostToolClient = hostToolClient;
+        this.flowelleToolClient = flowelleToolClient;
     }
 
     public ToolExecutionResult executeTools(Tenant tenant, ChatSession session, ChatMessageRequest request) {
@@ -82,18 +77,8 @@ public class ToolRegistryService {
             return;
         }
 
-        HostToolRequest hostToolRequest = new HostToolRequest(
-                UUID.randomUUID(),
-                tenant.getSlug(),
-                request.externalUserId(),
-                session.getId(),
-                toolConfig.getName(),
-                requestScopes,
-                StringUtils.hasText(request.locale()) ? request.locale() : "en-US",
-                Map.of("intent", toolConfig.getName()));
-
         try {
-            HostToolResponse response = hostToolClient.invoke(toolConfig, hostToolRequest);
+            HostToolResponse response = invokeFlowelleTool(tenant, session, request, requestScopes, toolConfig);
             if (response == null) {
                 toolCalls.add(new ToolCallResponse(
                         toolConfig.getName(),
@@ -123,14 +108,14 @@ public class ToolRegistryService {
                 || normalized.contains("period date")
                 || normalized.contains("cycle length")
                 || normalized.contains("cycle stats")) {
-            toolNames.add(CYCLE_SUMMARY_TOOL);
+            toolNames.add(FlowelleToolClient.CYCLE_SUMMARY_TOOL);
         }
         if (normalized.contains("food")
                 || normalized.contains("diet")
                 || normalized.contains("exercise")
                 || normalized.contains("preference")
                 || normalized.contains("lifestyle")) {
-            toolNames.add(USER_PREFERENCES_TOOL);
+            toolNames.add(FlowelleToolClient.USER_PREFERENCES_TOOL);
         }
         return toolNames;
     }
@@ -147,9 +132,24 @@ public class ToolRegistryService {
 
     private boolean isScopeAllowed(Set<String> requestScopes, Set<String> allowedScopes) {
         if (allowedScopes.isEmpty()) {
-            return true;
+            return false;
         }
         return requestScopes.stream().anyMatch(allowedScopes::contains);
+    }
+
+    private HostToolResponse invokeFlowelleTool(
+            Tenant tenant,
+            ChatSession session,
+            ChatMessageRequest request,
+            Set<String> requestScopes,
+            TenantToolConfig toolConfig) {
+        return switch (toolConfig.getName()) {
+            case FlowelleToolClient.CYCLE_SUMMARY_TOOL ->
+                    flowelleToolClient.fetchCycleSummary(tenant, session, request, toolConfig, requestScopes);
+            case FlowelleToolClient.USER_PREFERENCES_TOOL ->
+                    flowelleToolClient.fetchUserPreferences(tenant, session, request, toolConfig, requestScopes);
+            default -> throw new HostToolClientException("Unsupported Flowelle tool: " + toolConfig.getName(), null);
+        };
     }
 
     private boolean isSuccess(String status) {

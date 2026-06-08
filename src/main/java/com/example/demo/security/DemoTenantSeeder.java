@@ -75,6 +75,7 @@ public class DemoTenantSeeder implements ApplicationRunner {
                 name,
                 callbackUrl,
                 properties.getTools().getDemoSigningSecret(),
+                properties.getTools().getDemoSigningKeyId(),
                 allowedScopes,
                 true));
         logger.info("Seeded demo tenant tool config. tenant={} tool={}", tenant.getSlug(), name);

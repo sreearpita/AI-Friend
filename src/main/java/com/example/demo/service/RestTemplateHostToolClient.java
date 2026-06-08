@@ -54,6 +54,7 @@ public class RestTemplateHostToolClient implements HostToolClient {
             headers.set(HostToolSigner.TIMESTAMP_HEADER, timestamp);
             headers.set(HostToolSigner.SIGNATURE_HEADER, signature);
             headers.set(HostToolSigner.REQUEST_ID_HEADER, request.requestId().toString());
+            headers.set(HostToolSigner.KEY_ID_HEADER, toolConfig.getSigningKeyId());
 
             ResponseEntity<String> response = restTemplate.postForEntity(
                     toolConfig.getCallbackUrl(),
