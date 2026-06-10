@@ -12,6 +12,7 @@ The current implementation still uses Ollama locally for model calls. Flowelle-s
 - Spring Boot 3.2.3
 - Spring AI 0.8.1
 - Spring Web, Validation, Data JPA, Actuator
+- Flyway database migrations
 - H2 for local/test fallback
 - PostgreSQL driver for deployed environments
 - Ollama local model provider
@@ -93,6 +94,11 @@ export AIF_DEMO_TOOL_CALLBACK_URL=http://localhost:8090/aif/tools
 export AIF_DEMO_TOOL_SIGNING_SECRET=dev-aif-tool-secret
 export AIF_DEMO_TOOL_SIGNING_KEY_ID=dev-v1
 export AIF_TOOL_REQUEST_TIMEOUT_MS=2000
+export AIF_FLYWAY_ENABLED=true
+export AIF_FLYWAY_BASELINE_ON_MIGRATE=true
+export AIF_RETRIEVAL_ENABLED=true
+export AIF_RETRIEVAL_MAX_CITATIONS=3
+export AIF_RETRIEVAL_MIN_QUERY_LENGTH=4
 ```
 
 Frontend configuration uses Create React App environment variables:
@@ -143,6 +149,24 @@ Callback requests include:
 Tool calls are tenant-scoped and request-scope checked. `cycle-summary` requires a configured scope such as `cycle:read`; `user-preferences` requires a configured scope such as `preferences:read`. If a tool is missing, disabled, denied by scope, times out, or fails, the chat flow continues with a safe `SKIPPED` or `FAILED` tool call summary and general model context.
 
 `TenantToolConfig.signingSecret` is currently suitable for local/dev use only. Production should source callback secrets from a secret manager or encrypted column and use `signingKeyId` for key rotation.
+
+## Curated Retrieval
+
+AI-Friend uses Flyway-managed content tables for reviewed wellness citations:
+
+- `content_sources`: reviewed source metadata such as title, publisher, URL, locale, and status.
+- `content_chunks`: reviewed chunks with topic, text, and keywords.
+
+The current retrieval implementation is keyword-based, not vector-based. It only considers active, approved content and returns at most `AIF_RETRIEVAL_MAX_CITATIONS` citations. Relevant citation context is also added to the model prompt so wellness answers can be grounded in curated material.
+
+Seeded local content covers:
+
+- menstrual cramps self-care basics,
+- PMS nutrition and hydration,
+- gentle exercise during PMS/period,
+- red-flag symptom routing.
+
+This is a foundation for future pgvector retrieval. Production content should replace the placeholder source URLs and go through a review process.
 
 ## Running Locally
 
@@ -221,6 +245,8 @@ Implemented:
 - Safety red-flag routing and model fallback response
 - Tenant-configured signed host-tool callbacks
 - Typed Flowelle cycle summary and user preference contracts
+- Flyway-managed platform schema
+- Curated wellness content tables and keyword citations
 - Scope checks and safe tool skip/failure behavior
 - Structured API errors
 - React demo client updated to the v1 API
@@ -229,8 +255,7 @@ Implemented:
 Still placeholder or future work:
 
 - Flowelle-side implementation of AI-Friend callback endpoints
-- Curated RAG and pgvector embeddings
-- Production migrations instead of Hibernate `ddl-auto`
+- pgvector embeddings and semantic retrieval
 - Rate limits, quotas, and deeper tenant administration
 - Streaming responses
 - Production deployment packaging

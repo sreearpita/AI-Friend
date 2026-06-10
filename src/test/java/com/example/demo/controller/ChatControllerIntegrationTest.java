@@ -105,6 +105,36 @@ class ChatControllerIntegrationTest {
     }
 
     @Test
+    void wellnessPromptReturnsCitationsAndAddsCitationPromptContext() throws Exception {
+        mockMvc.perform(post("/v1/chat/messages")
+                        .header("X-AIF-Tenant-Key", API_KEY)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "externalUserId": "flowelle-user-1",
+                                  "message": "What food and hydration can help with PMS?",
+                                  "locale": "en-US",
+                                  "scopes": ["wellness"]
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.citations[0].title").value("PMS nutrition and hydration basics"))
+                .andExpect(jsonPath("$.citations[0].source").value("AI-Friend Curated Wellness Notes"))
+                .andExpect(jsonPath("$.citations[0].url").value("https://example.org/wellness/pms-nutrition-hydration"));
+
+        ArgumentCaptor<List<ChatPromptMessage>> promptCaptor = ArgumentCaptor.captor();
+        verify(modelClient).generate(promptCaptor.capture());
+        assertThat(promptCaptor.getValue())
+                .anySatisfy(message -> {
+                    assertThat(message.role()).isEqualTo("system");
+                    assertThat(message.content())
+                            .contains("Curated wellness references")
+                            .contains("PMS nutrition and hydration basics")
+                            .contains("Relevant guidance:");
+                });
+    }
+
+    @Test
     void chatReusesSessionAndIncludesPriorHistory() throws Exception {
         when(modelClient.generate(anyList())).thenReturn("First answer.", "Second answer.");
 
@@ -224,7 +254,8 @@ class ChatControllerIntegrationTest {
                                 """))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.safetyStatus").value("RED_FLAG_ESCALATION"))
-                .andExpect(jsonPath("$.answer", containsString("urgent medical help")));
+                .andExpect(jsonPath("$.answer", containsString("urgent medical help")))
+                .andExpect(jsonPath("$.citations").isEmpty());
 
         verify(modelClient, never()).generate(anyList());
     }

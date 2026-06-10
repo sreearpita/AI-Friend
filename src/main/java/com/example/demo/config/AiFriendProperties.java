@@ -10,6 +10,7 @@ public class AiFriendProperties {
     private final Security security = new Security();
     private final Chat chat = new Chat();
     private final Tools tools = new Tools();
+    private final Retrieval retrieval = new Retrieval();
 
     public Security getSecurity() {
         return security;
@@ -21,6 +22,10 @@ public class AiFriendProperties {
 
     public Tools getTools() {
         return tools;
+    }
+
+    public Retrieval getRetrieval() {
+        return retrieval;
     }
 
     public static class Security {
@@ -146,6 +151,36 @@ public class AiFriendProperties {
 
         public void setRequestTimeoutMs(int requestTimeoutMs) {
             this.requestTimeoutMs = requestTimeoutMs;
+        }
+    }
+
+    public static class Retrieval {
+        private boolean enabled = true;
+        private int maxCitations = 3;
+        private int minQueryLength = 4;
+
+        public boolean isEnabled() {
+            return enabled;
+        }
+
+        public void setEnabled(boolean enabled) {
+            this.enabled = enabled;
+        }
+
+        public int getMaxCitations() {
+            return maxCitations;
+        }
+
+        public void setMaxCitations(int maxCitations) {
+            this.maxCitations = maxCitations;
+        }
+
+        public int getMinQueryLength() {
+            return minQueryLength;
+        }
+
+        public void setMinQueryLength(int minQueryLength) {
+            this.minQueryLength = minQueryLength;
         }
     }
 }

@@ -98,9 +98,11 @@ public class ChatOrchestratorService {
                 safetyDecision.status()));
 
         List<CitationResponse> citations = List.of();
+        List<String> citationPromptContexts = List.of();
         ToolExecutionResult toolExecutionResult = ToolExecutionResult.empty();
         if (safetyDecision.shouldCallModel()) {
             citations = retrievalService.findRelevantCitations(request.message());
+            citationPromptContexts = retrievalService.findPromptContexts(request.message());
             toolExecutionResult = toolRegistryService.executeTools(tenant, session, request);
         }
         List<ToolCallResponse> toolCalls = toolExecutionResult.toolCalls();
@@ -109,7 +111,7 @@ public class ChatOrchestratorService {
         SafetyStatus finalStatus = safetyDecision.status();
         if (safetyDecision.shouldCallModel()) {
             try {
-                answer = modelClient.generate(buildPrompt(session, citations, toolExecutionResult.promptContexts()));
+                answer = modelClient.generate(buildPrompt(session, citationPromptContexts, toolExecutionResult.promptContexts()));
             } catch (ModelClientException exception) {
                 logger.warn("Model call failed. tenant={} sessionId={} reason={}",
                         authenticatedTenant.getSlug(),
@@ -162,7 +164,7 @@ public class ChatOrchestratorService {
 
     private List<ChatPromptMessage> buildPrompt(
             ChatSession session,
-            List<CitationResponse> citations,
+            List<String> citationPromptContexts,
             List<String> toolPromptContexts) {
         List<ChatPromptMessage> messages = new ArrayList<>();
         messages.add(new ChatPromptMessage("system", SYSTEM_PROMPT));
@@ -173,8 +175,11 @@ public class ChatOrchestratorService {
                     "Known user preference summary: " + session.getDerivedPreferenceSummary()));
         }
 
-        if (!citations.isEmpty()) {
-            messages.add(new ChatPromptMessage("system", "Use these curated references when relevant: " + citations));
+        if (!citationPromptContexts.isEmpty()) {
+            messages.add(new ChatPromptMessage(
+                    "system",
+                    "Curated wellness references for this turn. Use when relevant and do not overstate them:\n"
+                            + String.join("\n\n", citationPromptContexts)));
         }
 
         if (!toolPromptContexts.isEmpty()) {
