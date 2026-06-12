@@ -1,0 +1,19 @@
+{
+  "toolName": "cycle-summary",
+  "status": "OK",
+  "summary": "Predicted next period starts 2026-06-20.",
+  "facts": {
+    "nextPeriod": "2026-06-20",
+    "fertileWindowStart": "2026-06-01",
+    "fertileWindowEnd": "2026-06-07",
+    "ovulationDay": "2026-06-06",
+    "confidence": 82,
+    "basis": "Based on 4 logged cycles",
+    "isPredicted": true,
+    "cycleLength": 28,
+    "periodLength": 5,
+    "summary": "Predicted next period starts 2026-06-20.",
+    "userExplanation": "I used your Flowelle cycle summary."
+  },
+  "userExplanation": "I used your Flowelle cycle summary."
+}

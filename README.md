@@ -24,6 +24,7 @@ The current implementation still uses Ollama locally for model calls. Flowelle-s
 - Material UI 7
 - Create React App test/build tooling
 - Browser `fetch` for API calls
+- Demo rendering of citations and host-tool call statuses under AI messages
 
 ## Current API
 
@@ -122,10 +123,25 @@ Current deterministic tool intents:
 
 Flowelle contract assumptions are based on the current `sreearpita/Flowelle` repository:
 
-- `auth-service` runs at `http://localhost:8081/api` and owns JWT auth, profile, and user preferences.
-- `cycles-service` runs at `http://localhost:8082/api` and owns cycle tracking and predictions.
+- `auth-service` runs at `http://localhost:8081` and exposes `POST /aif/tools/user-preferences`.
+- `cycles-service` runs at `http://localhost:8082` and exposes `POST /api/aif/tools/cycle-summary`.
 - Existing Flowelle endpoints include `GET /api/cycles/predictions?userId={id}`, `GET /api/cycles/current?userId={id}`, and `GET /auth/me`.
-- Dedicated AI-Friend server-to-server callback endpoints are not checked in yet, so AI-Friend defines typed callback contracts that Flowelle can implement.
+
+Manual local callback wiring example:
+
+```bash
+export AIF_SEED_DEMO_TOOLS=true
+export AIF_DEMO_TOOL_CALLBACK_URL=http://localhost:8090/aif/tools
+# Configure tenant tool rows to point at:
+#   http://localhost:8082/api/aif/tools/cycle-summary
+#   http://localhost:8081/aif/tools/user-preferences
+```
+
+Shared callback contract fixtures live in:
+
+- AI-Friend: `src/test/resources/contracts/flowelle/`
+- Flowelle cycles-service: `backend/cycles-service/src/test/resources/contracts/aif/`
+- Flowelle auth-service: `backend/auth-service/src/test/resources/contracts/aif/`
 
 Typed Flowelle tool contracts in AI-Friend:
 
@@ -208,7 +224,18 @@ cd chat-frontend
 CI=true npm test -- --watchAll=false
 ```
 
-Automated backend tests mock the model client and do not require a live Ollama instance.
+Flowelle service tests:
+
+```bash
+cd ../Flowelle/backend/cycles-service && ./mvnw test
+cd ../auth-service && mvn test
+```
+
+Automated backend tests mock the model client and do not require a live Ollama instance. Flowelle callback integration smoke tests use `MockRestServiceServer` and do not require live Flowelle services.
+
+PostgreSQL migration coverage uses Testcontainers in `PostgresMigrationIntegrationTest`. Docker must be available for that test to run; if Docker is unavailable, the test is skipped rather than weakening the rest of the suite.
+
+The React demo renders citations and host-tool statuses returned by `/v1/chat/messages` under each AI message for local inspection.
 
 ## Project Structure
 
@@ -251,6 +278,10 @@ Implemented:
 - Structured API errors
 - React demo client updated to the v1 API
 - Backend and frontend smoke tests
+- Testcontainers PostgreSQL migration verification
+- Shared AI-Friend / Flowelle callback contract fixtures and signing-vector tests
+- Stubbed Flowelle HTTP integration smoke coverage
+- Frontend citation and tool-call visibility in the demo UI
 
 Still placeholder or future work:
 

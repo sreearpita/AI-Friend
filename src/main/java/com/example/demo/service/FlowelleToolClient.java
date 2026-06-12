@@ -53,6 +53,10 @@ public class FlowelleToolClient {
                 localeOrDefault(request.locale()),
                 CYCLE_SUMMARY_CONTRACT);
         HostToolResponse response = invoke(tenant, session, toolConfig, requestScopes, requestId, flowelleRequest);
+        if (isNoData(response.status())) {
+            return preserveNoDataResponse(CYCLE_SUMMARY_TOOL, response, "No cycle data is available yet.",
+                    "I could not find enough Flowelle cycle data to answer from your history.");
+        }
         FlowelleCycleSummaryResponse typedResponse = convertFacts(response, FlowelleCycleSummaryResponse.class);
         validateCycleSummary(typedResponse);
         return new HostToolResponse(
@@ -78,6 +82,10 @@ public class FlowelleToolClient {
                 localeOrDefault(request.locale()),
                 USER_PREFERENCES_CONTRACT);
         HostToolResponse response = invoke(tenant, session, toolConfig, requestScopes, requestId, flowelleRequest);
+        if (isNoData(response.status())) {
+            return preserveNoDataResponse(USER_PREFERENCES_TOOL, response, "No preferences are available yet.",
+                    "I could not find enough Flowelle preference data to answer from your profile.");
+        }
         FlowelleUserPreferencesResponse typedResponse = convertFacts(response, FlowelleUserPreferencesResponse.class);
         validateUserPreferences(typedResponse);
         return new HostToolResponse(
@@ -105,10 +113,33 @@ public class FlowelleToolClient {
                 locale(flowelleRequest),
                 objectMapper.convertValue(flowelleRequest, mapTypeReference));
         HostToolResponse response = hostToolClient.invoke(toolConfig, hostToolRequest);
-        if (response == null || response.facts() == null) {
+        if (response == null) {
+            throw new HostToolClientException("Flowelle tool returned no usable response", null);
+        }
+        if (isNoData(response.status())) {
+            return response;
+        }
+        if (response.facts() == null) {
             throw new HostToolClientException("Flowelle tool returned no usable response", null);
         }
         return response;
+    }
+
+    private boolean isNoData(String status) {
+        return StringUtils.hasText(status) && "NO_DATA".equalsIgnoreCase(status);
+    }
+
+    private HostToolResponse preserveNoDataResponse(
+            String toolName,
+            HostToolResponse response,
+            String fallbackSummary,
+            String fallbackExplanation) {
+        return new HostToolResponse(
+                toolName,
+                response.status(),
+                firstText(response.summary(), null, fallbackSummary),
+                response.facts() == null ? Map.of() : response.facts(),
+                firstText(response.userExplanation(), null, fallbackExplanation));
     }
 
     private <T> T convertFacts(HostToolResponse response, Class<T> responseType) {

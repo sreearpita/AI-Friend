@@ -53,7 +53,12 @@ function App() {
 
       const data = await response.json();
       setSessionId(data.sessionId);
-      setMessages(prev => [...prev, { text: data.answer, sender: 'ai' }]);
+      setMessages(prev => [...prev, {
+        text: data.answer,
+        sender: 'ai',
+        citations: data.citations || [],
+        toolCalls: data.toolCalls || []
+      }]);
     } catch (error) {
       console.error('Error:', error);
       setMessages(prev => [...prev, { text: 'Sorry, there was an error processing your request.', sender: 'ai' }]);
@@ -175,6 +180,38 @@ function App() {
                   }}
                 >
                   <Typography sx={{ whiteSpace: 'pre-wrap' }}>{message.text}</Typography>
+                  {message.sender === 'ai' && message.citations?.length > 0 && (
+                    <Box sx={{ mt: 1.5, pt: 1.5, borderTop: 1, borderColor: 'divider' }}>
+                      <Typography variant="caption" color="text.secondary" display="block" sx={{ mb: 0.5 }}>
+                        Sources
+                      </Typography>
+                      {message.citations.map((citation, citationIndex) => (
+                        <Typography key={citationIndex} variant="caption" display="block" sx={{ mb: 0.25 }}>
+                          {citation.url ? (
+                            <a href={citation.url} target="_blank" rel="noreferrer" style={{ color: 'inherit' }}>
+                              {citation.title}
+                            </a>
+                          ) : (
+                            citation.title
+                          )}
+                          {citation.source ? ` — ${citation.source}` : ''}
+                        </Typography>
+                      ))}
+                    </Box>
+                  )}
+                  {message.sender === 'ai' && message.toolCalls?.length > 0 && (
+                    <Box sx={{ mt: 1.5, pt: 1.5, borderTop: 1, borderColor: 'divider' }}>
+                      <Typography variant="caption" color="text.secondary" display="block" sx={{ mb: 0.5 }}>
+                        Host tools
+                      </Typography>
+                      {message.toolCalls.map((toolCall, toolIndex) => (
+                        <Typography key={toolIndex} variant="caption" display="block" sx={{ mb: 0.25 }}>
+                          {toolCall.name}: {toolCall.status}
+                          {toolCall.summary ? ` — ${toolCall.summary}` : ''}
+                        </Typography>
+                      ))}
+                    </Box>
+                  )}
                 </Paper>
               </Box>
             ))}

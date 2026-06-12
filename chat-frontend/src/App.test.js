@@ -35,6 +35,8 @@ test('sends a message to the v1 chat API and renders the answer', async () => {
   await userEvent.click(screen.getByRole('button', { name: /send message/i }));
 
   expect(await screen.findByText('A grounded wellness answer.')).toBeInTheDocument();
+  expect(screen.queryByText(/sources/i)).not.toBeInTheDocument();
+  expect(screen.queryByText(/host tools/i)).not.toBeInTheDocument();
   expect(global.fetch).toHaveBeenCalledWith(
     'http://localhost:8080/v1/chat/messages',
     expect.objectContaining({
@@ -66,4 +68,42 @@ test('renders an error message when the chat API fails', async () => {
   await userEvent.click(screen.getByRole('button', { name: /send message/i }));
 
   expect(await screen.findByText(/there was an error processing your request/i)).toBeInTheDocument();
+});
+
+test('renders citations and tool call statuses from structured AI responses', async () => {
+  global.fetch.mockResolvedValue({
+    ok: true,
+    json: async () => ({
+      sessionId: 'session-1',
+      answer: 'Try magnesium-rich foods and gentle movement.',
+      safetyStatus: 'OK',
+      citations: [
+        {
+          title: 'PMS nutrition and hydration basics',
+          source: 'AI-Friend Curated Wellness Notes',
+          url: 'https://example.org/wellness/pms-nutrition-hydration'
+        }
+      ],
+      toolCalls: [
+        {
+          name: 'user-preferences',
+          status: 'COMPLETED',
+          summary: 'Used your Flowelle preferences.'
+        }
+      ],
+      createdAt: '2026-06-07T00:00:00Z'
+    })
+  });
+
+  render(<App />);
+
+  await userEvent.type(screen.getByPlaceholderText(/type your message/i), 'What food helps with PMS?');
+  await userEvent.click(screen.getByRole('button', { name: /send message/i }));
+
+  expect(await screen.findByText('Try magnesium-rich foods and gentle movement.')).toBeInTheDocument();
+  expect(screen.getByText(/sources/i)).toBeInTheDocument();
+  expect(screen.getByText('PMS nutrition and hydration basics')).toBeInTheDocument();
+  expect(screen.getByText(/host tools/i)).toBeInTheDocument();
+  expect(screen.getByText(/user-preferences: COMPLETED/i)).toBeInTheDocument();
+  expect(screen.getByText(/Used your Flowelle preferences/i)).toBeInTheDocument();
 });

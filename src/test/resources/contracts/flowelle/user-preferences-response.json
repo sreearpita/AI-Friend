@@ -1,0 +1,17 @@
+{
+  "toolName": "user-preferences",
+  "status": "OK",
+  "summary": "Flowelle preferences indicate a typical cycle length of 28 days and period length of 5 days.",
+  "facts": {
+    "cycleLength": 28,
+    "periodLength": 5,
+    "birthControlUse": false,
+    "notificationsEnabled": true,
+    "aiCoachEnabled": true,
+    "voiceProcessingEnabled": false,
+    "analyticsOptIn": true,
+    "summary": "Flowelle preferences indicate a typical cycle length of 28 days and period length of 5 days.",
+    "userExplanation": "I used your Flowelle preferences."
+  },
+  "userExplanation": "I used your Flowelle preferences."
+}

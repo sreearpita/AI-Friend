@@ -119,6 +119,42 @@ class FlowelleToolClientTest {
     }
 
     @Test
+    void preservesNoDataCycleSummaryResponse() {
+        Tenant tenant = new Tenant("demo", "Demo Tenant");
+        TenantToolConfig toolConfig = new TenantToolConfig(
+                tenant,
+                FlowelleToolClient.CYCLE_SUMMARY_TOOL,
+                "https://flowelle.example/aif/tools/cycle-summary",
+                "test-secret",
+                Set.of("cycle:read"),
+                true);
+        ChatMessageRequest request = new ChatMessageRequest(
+                "flowelle-user-1",
+                null,
+                "When is my next period?",
+                "en-US",
+                Set.of("cycle:read"));
+        when(hostToolClient.invoke(any(TenantToolConfig.class), any(HostToolRequest.class)))
+                .thenReturn(new HostToolResponse(
+                        "cycle-summary",
+                        "NO_DATA",
+                        "No cycle data is available yet.",
+                        Map.of(),
+                        "I could not find enough Flowelle cycle data."));
+
+        HostToolResponse response = flowelleToolClient.fetchCycleSummary(
+                tenant,
+                new ChatSession(tenant, "flowelle-user-1"),
+                request,
+                toolConfig,
+                Set.of("cycle:read"));
+
+        assertThat(response.status()).isEqualTo("NO_DATA");
+        assertThat(response.summary()).isEqualTo("No cycle data is available yet.");
+        assertThat(response.facts()).isEmpty();
+    }
+
+    @Test
     void rejectsMalformedCycleSummaryResponse() {
         Tenant tenant = new Tenant("demo", "Demo Tenant");
         TenantToolConfig toolConfig = new TenantToolConfig(

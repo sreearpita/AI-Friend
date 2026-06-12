@@ -1,0 +1,17 @@
+{
+  "requestId": "00000000-0000-0000-0000-000000000001",
+  "tenantSlug": "demo",
+  "externalUserId": "flowelle-user-1",
+  "sessionId": "00000000-0000-0000-0000-000000000002",
+  "toolName": "cycle-summary",
+  "scopes": ["cycle:read"],
+  "locale": "en-US",
+  "parameters": {
+    "requestId": "00000000-0000-0000-0000-000000000001",
+    "externalUserId": "flowelle-user-1",
+    "sessionId": "00000000-0000-0000-0000-000000000002",
+    "scopes": ["cycle:read"],
+    "locale": "en-US",
+    "contractVersion": "flowelle.cycle-summary.v1"
+  }
+}
