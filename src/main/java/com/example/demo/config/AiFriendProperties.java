@@ -11,6 +11,10 @@ public class AiFriendProperties {
     private final Chat chat = new Chat();
     private final Tools tools = new Tools();
     private final Retrieval retrieval = new Retrieval();
+    private final Redis redis = new Redis();
+    private final RateLimits rateLimits = new RateLimits();
+    private final Admin admin = new Admin();
+    private final Secrets secrets = new Secrets();
 
     public Security getSecurity() {
         return security;
@@ -26,6 +30,22 @@ public class AiFriendProperties {
 
     public Retrieval getRetrieval() {
         return retrieval;
+    }
+
+    public Redis getRedis() {
+        return redis;
+    }
+
+    public RateLimits getRateLimits() {
+        return rateLimits;
+    }
+
+    public Admin getAdmin() {
+        return admin;
+    }
+
+    public Secrets getSecrets() {
+        return secrets;
     }
 
     public static class Security {
@@ -110,6 +130,7 @@ public class AiFriendProperties {
         private boolean seedDemoTools = false;
         private String demoCallbackUrl = "http://localhost:8090/aif/tools";
         private String demoSigningSecret = "dev-aif-tool-secret";
+        private String demoSigningSecretRef = "env://AIF_DEMO_TOOL_SIGNING_SECRET";
         private String demoSigningKeyId = "dev-v1";
         private int requestTimeoutMs = 2000;
 
@@ -135,6 +156,14 @@ public class AiFriendProperties {
 
         public void setDemoSigningSecret(String demoSigningSecret) {
             this.demoSigningSecret = demoSigningSecret;
+        }
+
+        public String getDemoSigningSecretRef() {
+            return demoSigningSecretRef;
+        }
+
+        public void setDemoSigningSecretRef(String demoSigningSecretRef) {
+            this.demoSigningSecretRef = demoSigningSecretRef;
         }
 
         public String getDemoSigningKeyId() {
@@ -181,6 +210,162 @@ public class AiFriendProperties {
 
         public void setMinQueryLength(int minQueryLength) {
             this.minQueryLength = minQueryLength;
+        }
+    }
+
+    public static class Redis {
+        private boolean enabled = false;
+        private String host = "localhost";
+        private int port = 6379;
+        private String password = "";
+        private int timeoutMs = 1000;
+        private String keyPrefix = "aif";
+
+        public boolean isEnabled() {
+            return enabled;
+        }
+
+        public void setEnabled(boolean enabled) {
+            this.enabled = enabled;
+        }
+
+        public String getHost() {
+            return host;
+        }
+
+        public void setHost(String host) {
+            this.host = host;
+        }
+
+        public int getPort() {
+            return port;
+        }
+
+        public void setPort(int port) {
+            this.port = port;
+        }
+
+        public String getPassword() {
+            return password;
+        }
+
+        public void setPassword(String password) {
+            this.password = password;
+        }
+
+        public int getTimeoutMs() {
+            return timeoutMs;
+        }
+
+        public void setTimeoutMs(int timeoutMs) {
+            this.timeoutMs = timeoutMs;
+        }
+
+        public String getKeyPrefix() {
+            return keyPrefix;
+        }
+
+        public void setKeyPrefix(String keyPrefix) {
+            this.keyPrefix = keyPrefix;
+        }
+    }
+
+    public static class RateLimits {
+        private boolean enabled = true;
+        private int userPerMinute = 20;
+        private int tenantPerMinute = 120;
+        private int tenantPerDay = 10000;
+
+        public boolean isEnabled() {
+            return enabled;
+        }
+
+        public void setEnabled(boolean enabled) {
+            this.enabled = enabled;
+        }
+
+        public int getUserPerMinute() {
+            return userPerMinute;
+        }
+
+        public void setUserPerMinute(int userPerMinute) {
+            this.userPerMinute = userPerMinute;
+        }
+
+        public int getTenantPerMinute() {
+            return tenantPerMinute;
+        }
+
+        public void setTenantPerMinute(int tenantPerMinute) {
+            this.tenantPerMinute = tenantPerMinute;
+        }
+
+        public int getTenantPerDay() {
+            return tenantPerDay;
+        }
+
+        public void setTenantPerDay(int tenantPerDay) {
+            this.tenantPerDay = tenantPerDay;
+        }
+    }
+
+    public static class Admin {
+        private String issuer = "";
+        private String audience = "ai-friend-admin";
+        private String jwksUri = "";
+        private String requiredRole = "aif-admin";
+        private int maxTokenLifetimeSeconds = 300;
+
+        public String getIssuer() {
+            return issuer;
+        }
+
+        public void setIssuer(String issuer) {
+            this.issuer = issuer;
+        }
+
+        public String getAudience() {
+            return audience;
+        }
+
+        public void setAudience(String audience) {
+            this.audience = audience;
+        }
+
+        public String getJwksUri() {
+            return jwksUri;
+        }
+
+        public void setJwksUri(String jwksUri) {
+            this.jwksUri = jwksUri;
+        }
+
+        public String getRequiredRole() {
+            return requiredRole;
+        }
+
+        public void setRequiredRole(String requiredRole) {
+            this.requiredRole = requiredRole;
+        }
+
+        public int getMaxTokenLifetimeSeconds() {
+            return maxTokenLifetimeSeconds;
+        }
+
+        public void setMaxTokenLifetimeSeconds(int maxTokenLifetimeSeconds) {
+            this.maxTokenLifetimeSeconds = maxTokenLifetimeSeconds;
+        }
+    }
+
+    public static class Secrets {
+        private boolean allowLiteral = false;
+
+        public boolean isAllowLiteral() {
+            return allowLiteral;
+        }
+
+        public void setAllowLiteral(boolean allowLiteral) {
+            this.allowLiteral = allowLiteral;
         }
     }
 }

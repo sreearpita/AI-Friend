@@ -4,13 +4,14 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 
-import com.example.demo.dto.ChatMessageRequest;
 import com.example.demo.dto.FlowelleCycleSummaryRequest;
 import com.example.demo.dto.FlowelleCycleSummaryResponse;
 import com.example.demo.dto.FlowelleUserPreferencesRequest;
 import com.example.demo.dto.FlowelleUserPreferencesResponse;
+import com.example.demo.dto.ChatMessageRequest;
 import com.example.demo.dto.HostToolRequest;
 import com.example.demo.dto.HostToolResponse;
+import com.example.demo.model.ChatCommand;
 import com.example.demo.model.ChatSession;
 import com.example.demo.model.HostToolClientException;
 import com.example.demo.model.Tenant;
@@ -41,18 +42,18 @@ public class FlowelleToolClient {
     public HostToolResponse fetchCycleSummary(
             Tenant tenant,
             ChatSession session,
-            ChatMessageRequest request,
+            ChatCommand command,
             TenantToolConfig toolConfig,
             Set<String> requestScopes) {
         UUID requestId = UUID.randomUUID();
         FlowelleCycleSummaryRequest flowelleRequest = new FlowelleCycleSummaryRequest(
                 requestId,
-                request.externalUserId(),
+                command.externalUserId(),
                 session.getId(),
                 requestScopes,
-                localeOrDefault(request.locale()),
+                localeOrDefault(command.locale()),
                 CYCLE_SUMMARY_CONTRACT);
-        HostToolResponse response = invoke(tenant, session, toolConfig, requestScopes, requestId, flowelleRequest);
+        HostToolResponse response = invoke(tenant, session, toolConfig, requestScopes, command.authorizationJti(), requestId, flowelleRequest);
         if (isNoData(response.status())) {
             return preserveNoDataResponse(CYCLE_SUMMARY_TOOL, response, "No cycle data is available yet.",
                     "I could not find enough Flowelle cycle data to answer from your history.");
@@ -67,21 +68,30 @@ public class FlowelleToolClient {
                 firstText(typedResponse.userExplanation(), response.userExplanation(), "Used Flowelle cycle summary."));
     }
 
-    public HostToolResponse fetchUserPreferences(
+    public HostToolResponse fetchCycleSummary(
             Tenant tenant,
             ChatSession session,
             ChatMessageRequest request,
             TenantToolConfig toolConfig,
             Set<String> requestScopes) {
+        return fetchCycleSummary(tenant, session, ChatCommand.fromV1(request), toolConfig, requestScopes);
+    }
+
+    public HostToolResponse fetchUserPreferences(
+            Tenant tenant,
+            ChatSession session,
+            ChatCommand command,
+            TenantToolConfig toolConfig,
+            Set<String> requestScopes) {
         UUID requestId = UUID.randomUUID();
         FlowelleUserPreferencesRequest flowelleRequest = new FlowelleUserPreferencesRequest(
                 requestId,
-                request.externalUserId(),
+                command.externalUserId(),
                 session.getId(),
                 requestScopes,
-                localeOrDefault(request.locale()),
+                localeOrDefault(command.locale()),
                 USER_PREFERENCES_CONTRACT);
-        HostToolResponse response = invoke(tenant, session, toolConfig, requestScopes, requestId, flowelleRequest);
+        HostToolResponse response = invoke(tenant, session, toolConfig, requestScopes, command.authorizationJti(), requestId, flowelleRequest);
         if (isNoData(response.status())) {
             return preserveNoDataResponse(USER_PREFERENCES_TOOL, response, "No preferences are available yet.",
                     "I could not find enough Flowelle preference data to answer from your profile.");
@@ -96,11 +106,21 @@ public class FlowelleToolClient {
                 firstText(typedResponse.userExplanation(), response.userExplanation(), "Used Flowelle preferences."));
     }
 
+    public HostToolResponse fetchUserPreferences(
+            Tenant tenant,
+            ChatSession session,
+            ChatMessageRequest request,
+            TenantToolConfig toolConfig,
+            Set<String> requestScopes) {
+        return fetchUserPreferences(tenant, session, ChatCommand.fromV1(request), toolConfig, requestScopes);
+    }
+
     private HostToolResponse invoke(
             Tenant tenant,
             ChatSession session,
             TenantToolConfig toolConfig,
             Set<String> requestScopes,
+            String authorizationJti,
             UUID requestId,
             Object flowelleRequest) {
         HostToolRequest hostToolRequest = new HostToolRequest(
@@ -110,6 +130,7 @@ public class FlowelleToolClient {
                 session.getId(),
                 toolConfig.getName(),
                 requestScopes,
+                authorizationJti,
                 locale(flowelleRequest),
                 objectMapper.convertValue(flowelleRequest, mapTypeReference));
         HostToolResponse response = hostToolClient.invoke(toolConfig, hostToolRequest);

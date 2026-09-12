@@ -60,4 +60,9 @@ public class Tenant {
     public boolean isActive() {
         return active;
     }
+
+    public void update(String displayName, boolean active) {
+        this.displayName = displayName;
+        this.active = active;
+    }
 }

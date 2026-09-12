@@ -38,6 +38,9 @@ public class TenantToolConfig {
     @Column(nullable = false, length = 500)
     private String signingSecret;
 
+    @Column(length = 500)
+    private String secretRef;
+
     @Column(nullable = false, length = 80)
     private String signingKeyId = "dev-v1";
 
@@ -59,14 +62,15 @@ public class TenantToolConfig {
             Tenant tenant,
             String name,
             String callbackUrl,
-            String signingSecret,
+            String secretRef,
             String signingKeyId,
             Set<String> allowedScopes,
             boolean active) {
         this.tenant = tenant;
         this.name = name;
         this.callbackUrl = callbackUrl;
-        this.signingSecret = signingSecret;
+        this.signingSecret = "";
+        this.secretRef = secretRef;
         this.signingKeyId = signingKeyId;
         this.allowedScopes = allowedScopes == null ? new HashSet<>() : new HashSet<>(allowedScopes);
         this.active = active;
@@ -76,10 +80,10 @@ public class TenantToolConfig {
             Tenant tenant,
             String name,
             String callbackUrl,
-            String signingSecret,
+            String secretRef,
             Set<String> allowedScopes,
             boolean active) {
-        this(tenant, name, callbackUrl, signingSecret, "dev-v1", allowedScopes, active);
+        this(tenant, name, callbackUrl, secretRef, "dev-v1", allowedScopes, active);
     }
 
     @PrePersist
@@ -105,8 +109,8 @@ public class TenantToolConfig {
         return callbackUrl;
     }
 
-    public String getSigningSecret() {
-        return signingSecret;
+    public String getSecretRef() {
+        return secretRef;
     }
 
     public String getSigningKeyId() {
@@ -119,5 +123,18 @@ public class TenantToolConfig {
 
     public boolean isActive() {
         return active;
+    }
+
+    public void update(
+            String callbackUrl,
+            String secretRef,
+            String signingKeyId,
+            Set<String> allowedScopes,
+            boolean active) {
+        this.callbackUrl = callbackUrl;
+        this.secretRef = secretRef;
+        this.signingKeyId = signingKeyId;
+        this.allowedScopes = allowedScopes == null ? new HashSet<>() : new HashSet<>(allowedScopes);
+        this.active = active;
     }
 }

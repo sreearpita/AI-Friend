@@ -2,7 +2,7 @@
 
 AI-Friend is evolving from a prototype chat app into a tenant-aware wellness assistant platform. The backend core includes versioned chat APIs, API-key auth, persistence, audit events, safety routing, model abstraction, signed host-tool callbacks, and a React demo client.
 
-The current implementation still uses Ollama locally for model calls. Flowelle-style host tools are supported through signed callback contracts, while curated RAG remains future work.
+The current implementation still uses Ollama locally for model calls. Flowelle-style host tools are supported through signed callback contracts, and curated keyword retrieval grounds wellness answers with reviewed content.
 
 ## Tech Stack
 
@@ -17,6 +17,8 @@ The current implementation still uses Ollama locally for model calls. Flowelle-s
 - PostgreSQL driver for deployed environments
 - Ollama local model provider
 - Signed host-tool callbacks for host-owned facts
+- RS256/JWKS user-context authorization for production chat
+- Redis-compatible replay and rate-limit guard
 
 ### Frontend
 
@@ -28,9 +30,39 @@ The current implementation still uses Ollama locally for model calls. Flowelle-s
 
 ## Current API
 
+### `POST /v2/chat/messages`
+
+Requires tenant authentication with `X-AIF-Tenant-Key` and a one-request user-context JWT in `X-AIF-User-Context`. The user-context JWT must be RS256-signed by the tenant's configured issuer/JWKS and include `iss`, `sub`, `aud`, `iat`, `exp`, `jti`, `tenant`, and `scope`.
+
+Request:
+
+```json
+{
+  "sessionId": null,
+  "message": "When is my next period?",
+  "locale": "en-US"
+}
+```
+
+Response:
+
+```json
+{
+  "requestId": "uuid",
+  "sessionId": "uuid",
+  "answer": "Assistant answer",
+  "safetyStatus": "OK",
+  "citations": [],
+  "toolCalls": [],
+  "createdAt": "2026-06-07T00:00:00Z"
+}
+```
+
+AI-Friend derives the external user ID and scopes only from the verified JWT. Request-body identity or scope fields are ignored by `/v2`. `aud` defaults to `ai-friend-chat`, token lifetime defaults to 60 seconds, and `scope` must include `wellness:chat`.
+
 ### `POST /v1/chat/messages`
 
-Requires tenant authentication with the `X-AIF-Tenant-Key` header.
+Local-profile compatibility endpoint. It requires tenant authentication with the `X-AIF-Tenant-Key` header and still accepts caller-supplied identity/scopes for local development and regression tests.
 
 Request:
 
@@ -59,7 +91,7 @@ Response:
 
 ### Compatibility Endpoint
 
-`POST /chat` still accepts a plain text body for the old demo flow. It uses the seeded demo tenant and delegates to the new orchestration path.
+`POST /chat` is also local-profile only. It accepts a plain text body for the old demo flow, uses the seeded demo tenant, and delegates to the shared orchestration path.
 
 ## Local Defaults
 
@@ -93,6 +125,7 @@ export AIF_JPA_DDL_AUTO=update
 export AIF_SEED_DEMO_TOOLS=false
 export AIF_DEMO_TOOL_CALLBACK_URL=http://localhost:8090/aif/tools
 export AIF_DEMO_TOOL_SIGNING_SECRET=dev-aif-tool-secret
+export AIF_DEMO_TOOL_SIGNING_SECRET_REF=env://AIF_DEMO_TOOL_SIGNING_SECRET
 export AIF_DEMO_TOOL_SIGNING_KEY_ID=dev-v1
 export AIF_TOOL_REQUEST_TIMEOUT_MS=2000
 export AIF_FLYWAY_ENABLED=true
@@ -100,6 +133,17 @@ export AIF_FLYWAY_BASELINE_ON_MIGRATE=true
 export AIF_RETRIEVAL_ENABLED=true
 export AIF_RETRIEVAL_MAX_CITATIONS=3
 export AIF_RETRIEVAL_MIN_QUERY_LENGTH=4
+export AIF_REDIS_ENABLED=false
+export AIF_REDIS_HOST=localhost
+export AIF_REDIS_PORT=6379
+export AIF_REDIS_PASSWORD=
+export AIF_RATE_LIMIT_USER_PER_MINUTE=20
+export AIF_RATE_LIMIT_TENANT_PER_MINUTE=120
+export AIF_RATE_LIMIT_TENANT_PER_DAY=10000
+export AIF_ADMIN_ISSUER=https://issuer.example
+export AIF_ADMIN_AUDIENCE=ai-friend-admin
+export AIF_ADMIN_JWKS_URI=https://issuer.example/.well-known/jwks.json
+export AIF_ADMIN_REQUIRED_ROLE=aif-admin
 ```
 
 Frontend configuration uses Create React App environment variables:
@@ -162,9 +206,20 @@ Callback requests include:
 - `X-AIF-Request-Id`
 - `X-AIF-Key-Id`
 
-Tool calls are tenant-scoped and request-scope checked. `cycle-summary` requires a configured scope such as `cycle:read`; `user-preferences` requires a configured scope such as `preferences:read`. If a tool is missing, disabled, denied by scope, times out, or fails, the chat flow continues with a safe `SKIPPED` or `FAILED` tool call summary and general model context.
+Tool calls are tenant-scoped and request-scope checked. In `/v2`, those scopes come from the verified user-context JWT. `cycle-summary` requires a configured scope such as `cycle:read`; `user-preferences` requires a configured scope such as `preferences:read`. If a tool is missing, disabled, denied by scope, times out, or fails, the chat flow continues with a safe `SKIPPED` or `FAILED` tool call summary and general model context.
 
-`TenantToolConfig.signingSecret` is currently suitable for local/dev use only. Production should source callback secrets from a secret manager or encrypted column and use `signingKeyId` for key rotation.
+Tool signing secrets are resolved from `TenantToolConfig.secretRef`. Milestone 6 supports `env://VARIABLE_NAME`; resolved secret values are not returned by APIs or written to audit logs. The legacy plaintext `signing_secret` column is cleared by migration and retained only as a migration bridge.
+
+## Admin API
+
+`/internal/admin/**` is protected by a provider-neutral RS256 bearer JWT. Configure the admin issuer, audience, JWKS URI, and required role through `AIF_ADMIN_*` settings. The management API supports:
+
+- upserting tenants,
+- configuring tenant user-context issuer/JWKS settings,
+- configuring host tools with `env://` secret references,
+- creating tenant API keys with one-time key disclosure,
+- listing only key metadata,
+- revoking keys immediately.
 
 ## Curated Retrieval
 
@@ -241,9 +296,7 @@ The React demo renders citations and host-tool statuses returned by `/v1/chat/me
 
 ```text
 .
-├── plan/
-│   ├── master-plan.md
-│   └── milestone1-plan.md
+├── plan/                  # Master and milestone plans
 ├── src/main/java/com/example/demo/
 │   ├── config/             # Environment-backed app and web config
 │   ├── controller/         # HTTP API
@@ -251,7 +304,7 @@ The React demo renders citations and host-tool statuses returned by `/v1/chat/me
 │   ├── exception/          # Structured API errors
 │   ├── model/              # JPA entities and domain records
 │   ├── repository/         # Spring Data repositories
-│   ├── security/           # Tenant API-key auth and demo seeding
+│   ├── security/           # Tenant API keys, JWT/JWKS auth, rate limits, secrets
 │   └── service/            # Chat orchestration, model, safety, audit, host tools
 ├── src/test/java/          # Backend integration tests
 └── chat-frontend/          # React demo client
@@ -261,10 +314,16 @@ The React demo renders citations and host-tool statuses returned by `/v1/chat/me
 
 Implemented:
 
+- Production `/v2/chat/messages` endpoint
 - Versioned `/v1/chat/messages` endpoint
 - Legacy `/chat` wrapper
-- Tenant API-key auth for `/v1/**`
-- Hashed API key storage
+- Tenant API-key auth for `/v1/**` and `/v2/**`
+- Hashed API key storage with prefix, expiry, revocation, and last-used metadata
+- RS256/JWKS tenant user-context authentication
+- One-request `jti` replay protection
+- Redis-compatible user, tenant, and daily quota enforcement
+- Provider-neutral OIDC admin guard and management API
+- `env://` tool secret references
 - Demo tenant seeding
 - JPA entities for tenants, API keys, sessions, messages, and audit events
 - H2 local/test fallback with PostgreSQL-ready configuration
@@ -285,9 +344,8 @@ Implemented:
 
 Still placeholder or future work:
 
-- Flowelle-side implementation of AI-Friend callback endpoints
+- Flowelle backend proxy for issuing one-request user-context JWTs and enforcing `aiCoachEnabled`
 - pgvector embeddings and semantic retrieval
-- Rate limits, quotas, and deeper tenant administration
 - Streaming responses
 - Production deployment packaging
 

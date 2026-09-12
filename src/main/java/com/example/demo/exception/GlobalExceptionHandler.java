@@ -4,6 +4,8 @@ import java.time.Instant;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
+import com.example.demo.security.RateLimitException;
+
 import jakarta.validation.ConstraintViolationException;
 
 import org.slf4j.Logger;
@@ -22,6 +24,20 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(ApiException.class)
     public ResponseEntity<ApiErrorResponse> handleApiException(ApiException exception) {
         return error(exception.getStatus(), exception.getCode(), exception.getMessage());
+    }
+
+    @ExceptionHandler(RateLimitException.class)
+    public ResponseEntity<ApiErrorResponse> handleRateLimitException(RateLimitException exception) {
+        ApiErrorResponse body = new ApiErrorResponse(
+                Instant.now(),
+                exception.getStatus().value(),
+                exception.getCode(),
+                exception.getMessage(),
+                UUID.randomUUID().toString());
+        return ResponseEntity.status(exception.getStatus())
+                .header("Retry-After", String.valueOf(exception.getRetryAfterSeconds()))
+                .header("X-RateLimit-Retry-After", String.valueOf(exception.getRetryAfterSeconds()))
+                .body(body);
     }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)

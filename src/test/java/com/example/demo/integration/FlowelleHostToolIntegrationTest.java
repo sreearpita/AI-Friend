@@ -41,9 +41,11 @@ import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.test.web.client.MockRestServiceServer;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.web.client.RestTemplate;
+import org.springframework.test.context.ActiveProfiles;
 
-@SpringBootTest
+@SpringBootTest(properties = "aif.secrets.allow-literal=true")
 @AutoConfigureMockMvc
+@ActiveProfiles("local")
 class FlowelleHostToolIntegrationTest {
     private static final String API_KEY = "dev-aif-demo-key";
     private static final String CYCLE_SUMMARY_URL = "https://flowelle.test/api/aif/tools/cycle-summary";
@@ -161,14 +163,14 @@ class FlowelleHostToolIntegrationTest {
                 tenant,
                 FlowelleToolClient.CYCLE_SUMMARY_TOOL,
                 CYCLE_SUMMARY_URL,
-                "test-secret",
+                "literal://test-secret",
                 Set.of("cycle:read"),
                 true));
         tenantToolConfigRepository.save(new TenantToolConfig(
                 tenant,
                 FlowelleToolClient.USER_PREFERENCES_TOOL,
                 USER_PREFERENCES_URL,
-                "test-secret",
+                "literal://test-secret",
                 Set.of("preferences:read"),
                 true));
     }

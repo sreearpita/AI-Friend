@@ -20,6 +20,7 @@ import java.util.Set;
 
 import com.example.demo.dto.HostToolResponse;
 import com.example.demo.model.AuditEvent;
+import com.example.demo.model.ChatCommand;
 import com.example.demo.model.ModelClient;
 import com.example.demo.model.ModelClientException;
 import com.example.demo.model.ChatPromptMessage;
@@ -43,9 +44,11 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
+import org.springframework.test.context.ActiveProfiles;
 
-@SpringBootTest
+@SpringBootTest(properties = "aif.secrets.allow-literal=true")
 @AutoConfigureMockMvc
+@ActiveProfiles("local")
 class ChatControllerIntegrationTest {
     private static final String API_KEY = "dev-aif-demo-key";
 
@@ -284,7 +287,7 @@ class ChatControllerIntegrationTest {
         when(flowelleToolClient.fetchCycleSummary(
                 any(Tenant.class),
                 any(),
-                any(),
+                any(ChatCommand.class),
                 any(TenantToolConfig.class),
                 any()))
                 .thenReturn(new HostToolResponse(
@@ -344,7 +347,7 @@ class ChatControllerIntegrationTest {
         verify(flowelleToolClient, never()).fetchCycleSummary(
                 any(Tenant.class),
                 any(),
-                any(),
+                any(ChatCommand.class),
                 any(TenantToolConfig.class),
                 any());
     }
@@ -355,7 +358,7 @@ class ChatControllerIntegrationTest {
         when(flowelleToolClient.fetchUserPreferences(
                 any(Tenant.class),
                 any(),
-                any(),
+                any(ChatCommand.class),
                 any(TenantToolConfig.class),
                 any()))
                 .thenThrow(new HostToolClientException("down", new RuntimeException("down")));
@@ -394,7 +397,7 @@ class ChatControllerIntegrationTest {
                 tenant,
                 name,
                 "https://flowelle.example/aif/tools/" + name,
-                "test-secret",
+                "literal://test-secret",
                 allowedScopes,
                 true));
     }

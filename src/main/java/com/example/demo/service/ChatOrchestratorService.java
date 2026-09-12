@@ -1,16 +1,17 @@
 package com.example.demo.service;
 
 import java.time.Instant;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 
 import com.example.demo.config.AiFriendProperties;
-import com.example.demo.dto.ChatMessageRequest;
 import com.example.demo.dto.ChatMessageResponse;
 import com.example.demo.dto.CitationResponse;
 import com.example.demo.dto.ToolCallResponse;
+import com.example.demo.model.ChatCommand;
 import com.example.demo.exception.ApiException;
 import com.example.demo.model.ChatMessage;
 import com.example.demo.model.ChatPromptMessage;
@@ -55,6 +56,7 @@ public class ChatOrchestratorService {
     private final RetrievalService retrievalService;
     private final ToolRegistryService toolRegistryService;
     private final AuditService auditService;
+    private final PlatformMetrics platformMetrics;
 
     public ChatOrchestratorService(
             AiFriendProperties properties,
@@ -65,7 +67,8 @@ public class ChatOrchestratorService {
             SafetyService safetyService,
             RetrievalService retrievalService,
             ToolRegistryService toolRegistryService,
-            AuditService auditService) {
+            AuditService auditService,
+            PlatformMetrics platformMetrics) {
         this.properties = properties;
         this.tenantRepository = tenantRepository;
         this.chatSessionRepository = chatSessionRepository;
@@ -75,35 +78,39 @@ public class ChatOrchestratorService {
         this.retrievalService = retrievalService;
         this.toolRegistryService = toolRegistryService;
         this.auditService = auditService;
+        this.platformMetrics = platformMetrics;
     }
 
     @Transactional
-    public ChatMessageResponse chat(Tenant authenticatedTenant, ChatMessageRequest request) {
-        validateRequest(request);
+    public ChatMessageResponse chat(Tenant authenticatedTenant, ChatCommand command) {
+        Instant startedAt = Instant.now();
+        validateRequest(command);
 
         Tenant tenant = tenantRepository.getReferenceById(authenticatedTenant.getId());
-        ChatSession session = resolveSession(tenant, request);
-        SafetyDecision safetyDecision = safetyService.evaluate(request.message());
+        ChatSession session = resolveSession(tenant, command);
+        SafetyDecision safetyDecision = safetyService.evaluate(command.message());
 
-        auditService.record(tenant, request.externalUserId(), session.getId(), "chat.message.received", Map.of(
-                "messageLength", request.message().length(),
-                "locale", request.locale() == null ? "" : request.locale(),
-                "scopeCount", request.scopes() == null ? 0 : request.scopes().size()));
+        auditService.record(tenant, command.externalUserId(), session.getId(), "chat.message.received", Map.of(
+                "requestId", command.requestId().toString(),
+                "authorizationJti", command.authorizationJti() == null ? "" : command.authorizationJti(),
+                "messageLength", command.message().length(),
+                "locale", command.locale() == null ? "" : command.locale(),
+                "scopeCount", command.scopes() == null ? 0 : command.scopes().size()));
 
         chatMessageRepository.save(new ChatMessage(
                 tenant,
                 session,
                 MessageRole.USER,
-                request.message(),
+                command.message(),
                 safetyDecision.status()));
 
         List<CitationResponse> citations = List.of();
         List<String> citationPromptContexts = List.of();
         ToolExecutionResult toolExecutionResult = ToolExecutionResult.empty();
         if (safetyDecision.shouldCallModel()) {
-            citations = retrievalService.findRelevantCitations(request.message());
-            citationPromptContexts = retrievalService.findPromptContexts(request.message());
-            toolExecutionResult = toolRegistryService.executeTools(tenant, session, request);
+            citations = retrievalService.findRelevantCitations(command.message());
+            citationPromptContexts = retrievalService.findPromptContexts(command.message());
+            toolExecutionResult = toolRegistryService.executeTools(tenant, session, command);
         }
         List<ToolCallResponse> toolCalls = toolExecutionResult.toolCalls();
 
@@ -117,6 +124,7 @@ public class ChatOrchestratorService {
                         authenticatedTenant.getSlug(),
                         session.getId(),
                         exception.getMessage());
+                platformMetrics.recordModelFailure(authenticatedTenant.getSlug());
                 answer = safetyService.modelFallbackResponse();
                 finalStatus = SafetyStatus.MODEL_FALLBACK;
             }
@@ -131,7 +139,9 @@ public class ChatOrchestratorService {
                 answer,
                 finalStatus));
 
-        auditService.record(tenant, request.externalUserId(), session.getId(), "chat.message.completed", Map.of(
+        auditService.record(tenant, command.externalUserId(), session.getId(), "chat.message.completed", Map.of(
+                "requestId", command.requestId().toString(),
+                "authorizationJti", command.authorizationJti() == null ? "" : command.authorizationJti(),
                 "answerLength", answer.length(),
                 "safetyStatus", finalStatus.name(),
                 "citationCount", citations.size(),
@@ -139,8 +149,10 @@ public class ChatOrchestratorService {
                 "toolStatuses", toolCalls.stream()
                         .map(toolCall -> toolCall.name() + ":" + toolCall.status())
                         .toList()));
+        platformMetrics.recordChat(tenant.getSlug(), finalStatus.name(), Duration.between(startedAt, Instant.now()));
 
         return new ChatMessageResponse(
+                command.requestId(),
                 session.getId(),
                 answer,
                 finalStatus,
@@ -149,14 +161,14 @@ public class ChatOrchestratorService {
                 Instant.now());
     }
 
-    private ChatSession resolveSession(Tenant tenant, ChatMessageRequest request) {
-        if (request.sessionId() == null) {
-            return chatSessionRepository.save(new ChatSession(tenant, request.externalUserId()));
+    private ChatSession resolveSession(Tenant tenant, ChatCommand command) {
+        if (command.sessionId() == null) {
+            return chatSessionRepository.save(new ChatSession(tenant, command.externalUserId()));
         }
 
-        ChatSession session = chatSessionRepository.findByIdAndTenantId(request.sessionId(), tenant.getId())
+        ChatSession session = chatSessionRepository.findByIdAndTenantId(command.sessionId(), tenant.getId())
                 .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "SESSION_NOT_FOUND", "Chat session was not found."));
-        if (!session.getExternalUserId().equals(request.externalUserId())) {
+        if (!session.getExternalUserId().equals(command.externalUserId())) {
             throw new ApiException(HttpStatus.FORBIDDEN, "SESSION_USER_MISMATCH", "Session does not belong to this user.");
         }
         return session;
@@ -200,17 +212,17 @@ public class ChatOrchestratorService {
         return messages;
     }
 
-    private void validateRequest(ChatMessageRequest request) {
-        if (request == null) {
+    private void validateRequest(ChatCommand command) {
+        if (command == null) {
             throw new ApiException(HttpStatus.BAD_REQUEST, "INVALID_REQUEST", "Request body is required.");
         }
-        if (!StringUtils.hasText(request.externalUserId())) {
+        if (!StringUtils.hasText(command.externalUserId())) {
             throw new ApiException(HttpStatus.BAD_REQUEST, "VALIDATION_FAILED", "externalUserId must not be blank.");
         }
-        if (!StringUtils.hasText(request.message())) {
+        if (!StringUtils.hasText(command.message())) {
             throw new ApiException(HttpStatus.BAD_REQUEST, "VALIDATION_FAILED", "message must not be blank.");
         }
-        if (request.message().length() > properties.getChat().getMaxMessageLength()) {
+        if (command.message().length() > properties.getChat().getMaxMessageLength()) {
             throw new ApiException(HttpStatus.BAD_REQUEST, "VALIDATION_FAILED", "message is too long.");
         }
     }

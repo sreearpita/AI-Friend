@@ -30,7 +30,9 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 class PostgresMigrationIntegrationTest {
     private static final Set<String> REQUIRED_TABLES = Set.of(
             "tenants",
+            "api_keys",
             "tenant_tool_configs",
+            "tenant_user_auth_configs",
             "content_sources",
             "content_chunks");
 

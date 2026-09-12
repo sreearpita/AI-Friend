@@ -28,11 +28,23 @@ public class ApiKey {
     @Column(nullable = false, unique = true, length = 128)
     private String keyHash;
 
+    @Column(nullable = false, length = 32)
+    private String keyPrefix;
+
     @Column(nullable = false, length = 120)
     private String label;
 
     @Column(nullable = false)
     private boolean active = true;
+
+    private Instant expiresAt;
+
+    private Instant revokedAt;
+
+    private Instant lastUsedAt;
+
+    @Column(length = 160)
+    private String createdBy;
 
     @Column(nullable = false, updatable = false)
     private Instant createdAt;
@@ -40,10 +52,17 @@ public class ApiKey {
     protected ApiKey() {
     }
 
-    public ApiKey(Tenant tenant, String keyHash, String label) {
+    public ApiKey(Tenant tenant, String keyHash, String keyPrefix, String label, Instant expiresAt, String createdBy) {
         this.tenant = tenant;
         this.keyHash = keyHash;
+        this.keyPrefix = keyPrefix;
         this.label = label;
+        this.expiresAt = expiresAt;
+        this.createdBy = createdBy;
+    }
+
+    public ApiKey(Tenant tenant, String keyHash, String label) {
+        this(tenant, keyHash, "legacy", label, null, null);
     }
 
     @PrePersist
@@ -65,7 +84,44 @@ public class ApiKey {
         return keyHash;
     }
 
+    public String getKeyPrefix() {
+        return keyPrefix;
+    }
+
+    public String getLabel() {
+        return label;
+    }
+
     public boolean isActive() {
         return active;
+    }
+
+    public Instant getExpiresAt() {
+        return expiresAt;
+    }
+
+    public Instant getRevokedAt() {
+        return revokedAt;
+    }
+
+    public Instant getLastUsedAt() {
+        return lastUsedAt;
+    }
+
+    public String getCreatedBy() {
+        return createdBy;
+    }
+
+    public Instant getCreatedAt() {
+        return createdAt;
+    }
+
+    public void markUsed(Instant usedAt) {
+        this.lastUsedAt = usedAt;
+    }
+
+    public void revoke(Instant revokedAt) {
+        this.active = false;
+        this.revokedAt = revokedAt;
     }
 }

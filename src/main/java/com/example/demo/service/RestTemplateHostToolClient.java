@@ -9,6 +9,7 @@ import com.example.demo.dto.HostToolResponse;
 import com.example.demo.model.HostToolClientException;
 import com.example.demo.model.TenantToolConfig;
 import com.example.demo.security.HostToolSigner;
+import com.example.demo.security.SecretResolver;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
@@ -26,12 +27,14 @@ public class RestTemplateHostToolClient implements HostToolClient {
     private final RestTemplate restTemplate;
     private final ObjectMapper objectMapper;
     private final HostToolSigner hostToolSigner;
+    private final SecretResolver secretResolver;
 
     public RestTemplateHostToolClient(
             RestTemplateBuilder restTemplateBuilder,
             AiFriendProperties properties,
             ObjectMapper objectMapper,
-            HostToolSigner hostToolSigner) {
+            HostToolSigner hostToolSigner,
+            SecretResolver secretResolver) {
         Duration timeout = Duration.ofMillis(properties.getTools().getRequestTimeoutMs());
         this.restTemplate = restTemplateBuilder
                 .setConnectTimeout(timeout)
@@ -39,6 +42,7 @@ public class RestTemplateHostToolClient implements HostToolClient {
                 .build();
         this.objectMapper = objectMapper;
         this.hostToolSigner = hostToolSigner;
+        this.secretResolver = secretResolver;
     }
 
     @Override
@@ -46,7 +50,7 @@ public class RestTemplateHostToolClient implements HostToolClient {
         try {
             String body = objectMapper.writeValueAsString(request);
             String timestamp = Instant.now().toString();
-            String signature = hostToolSigner.sign(timestamp, body, toolConfig.getSigningSecret());
+            String signature = hostToolSigner.sign(timestamp, body, secretResolver.resolve(toolConfig.getSecretRef()));
 
             HttpHeaders headers = new HttpHeaders();
             headers.setContentType(MediaType.APPLICATION_JSON);

@@ -8,9 +8,9 @@ import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
-import com.example.demo.dto.ChatMessageRequest;
 import com.example.demo.dto.HostToolResponse;
 import com.example.demo.dto.ToolCallResponse;
+import com.example.demo.model.ChatCommand;
 import com.example.demo.model.ChatSession;
 import com.example.demo.model.HostToolClientException;
 import com.example.demo.model.Tenant;
@@ -25,21 +25,26 @@ import org.springframework.util.StringUtils;
 public class ToolRegistryService {
     private final TenantToolConfigRepository tenantToolConfigRepository;
     private final FlowelleToolClient flowelleToolClient;
+    private final PlatformMetrics platformMetrics;
 
-    public ToolRegistryService(TenantToolConfigRepository tenantToolConfigRepository, FlowelleToolClient flowelleToolClient) {
+    public ToolRegistryService(
+            TenantToolConfigRepository tenantToolConfigRepository,
+            FlowelleToolClient flowelleToolClient,
+            PlatformMetrics platformMetrics) {
         this.tenantToolConfigRepository = tenantToolConfigRepository;
         this.flowelleToolClient = flowelleToolClient;
+        this.platformMetrics = platformMetrics;
     }
 
-    public ToolExecutionResult executeTools(Tenant tenant, ChatSession session, ChatMessageRequest request) {
-        Set<String> toolNames = detectToolNames(request.message());
+    public ToolExecutionResult executeTools(Tenant tenant, ChatSession session, ChatCommand command) {
+        Set<String> toolNames = detectToolNames(command.message());
         if (toolNames.isEmpty()) {
             return ToolExecutionResult.empty();
         }
 
         List<ToolCallResponse> toolCalls = new ArrayList<>();
         List<String> promptContexts = new ArrayList<>();
-        Set<String> requestScopes = normalizeScopes(request.scopes());
+        Set<String> requestScopes = normalizeScopes(command.scopes());
 
         for (String toolName : toolNames) {
             tenantToolConfigRepository.findByTenantIdAndNameAndActiveTrue(tenant.getId(), toolName)
@@ -47,15 +52,18 @@ public class ToolRegistryService {
                             toolConfig -> invokeConfiguredTool(
                                     tenant,
                                     session,
-                                    request,
+                                    command,
                                     requestScopes,
                                     toolConfig,
                                     toolCalls,
                                     promptContexts),
-                            () -> toolCalls.add(new ToolCallResponse(
-                                    toolName,
-                                    "SKIPPED",
-                                    "Host tool is not configured for this tenant.")));
+                            () -> {
+                                toolCalls.add(new ToolCallResponse(
+                                        toolName,
+                                        "SKIPPED",
+                                        "Host tool is not configured for this tenant."));
+                                platformMetrics.recordToolOutcome(tenant.getSlug(), toolName, "SKIPPED");
+                            });
         }
 
         return new ToolExecutionResult(List.copyOf(toolCalls), List.copyOf(promptContexts));
@@ -64,7 +72,7 @@ public class ToolRegistryService {
     private void invokeConfiguredTool(
             Tenant tenant,
             ChatSession session,
-            ChatMessageRequest request,
+            ChatCommand command,
             Set<String> requestScopes,
             TenantToolConfig toolConfig,
             List<ToolCallResponse> toolCalls,
@@ -74,30 +82,35 @@ public class ToolRegistryService {
                     toolConfig.getName(),
                     "SKIPPED",
                     "Required host-app scope is not available for this request."));
+            platformMetrics.recordToolOutcome(tenant.getSlug(), toolConfig.getName(), "SKIPPED");
             return;
         }
 
         try {
-            HostToolResponse response = invokeFlowelleTool(tenant, session, request, requestScopes, toolConfig);
+            HostToolResponse response = invokeFlowelleTool(tenant, session, command, requestScopes, toolConfig);
             if (response == null) {
                 toolCalls.add(new ToolCallResponse(
                         toolConfig.getName(),
                         "FAILED",
                         "Host tool returned no usable response."));
+                platformMetrics.recordToolOutcome(tenant.getSlug(), toolConfig.getName(), "FAILED");
                 return;
             }
             String summary = firstText(response.userExplanation(), response.summary(), "Host tool returned context.");
             if (isSuccess(response.status())) {
                 toolCalls.add(new ToolCallResponse(toolConfig.getName(), "COMPLETED", summary));
+                platformMetrics.recordToolOutcome(tenant.getSlug(), toolConfig.getName(), "COMPLETED");
                 promptContexts.add(promptContext(toolConfig.getName(), response));
             } else {
                 toolCalls.add(new ToolCallResponse(toolConfig.getName(), "FAILED", summary));
+                platformMetrics.recordToolOutcome(tenant.getSlug(), toolConfig.getName(), "FAILED");
             }
         } catch (HostToolClientException exception) {
             toolCalls.add(new ToolCallResponse(
                     toolConfig.getName(),
                     "FAILED",
                     "Host tool was unavailable; answering with general wellness guidance."));
+            platformMetrics.recordToolOutcome(tenant.getSlug(), toolConfig.getName(), "FAILED");
         }
     }
 
@@ -140,14 +153,14 @@ public class ToolRegistryService {
     private HostToolResponse invokeFlowelleTool(
             Tenant tenant,
             ChatSession session,
-            ChatMessageRequest request,
+            ChatCommand command,
             Set<String> requestScopes,
             TenantToolConfig toolConfig) {
         return switch (toolConfig.getName()) {
             case FlowelleToolClient.CYCLE_SUMMARY_TOOL ->
-                    flowelleToolClient.fetchCycleSummary(tenant, session, request, toolConfig, requestScopes);
+                    flowelleToolClient.fetchCycleSummary(tenant, session, command, toolConfig, requestScopes);
             case FlowelleToolClient.USER_PREFERENCES_TOOL ->
-                    flowelleToolClient.fetchUserPreferences(tenant, session, request, toolConfig, requestScopes);
+                    flowelleToolClient.fetchUserPreferences(tenant, session, command, toolConfig, requestScopes);
             default -> throw new HostToolClientException("Unsupported Flowelle tool: " + toolConfig.getName(), null);
         };
     }

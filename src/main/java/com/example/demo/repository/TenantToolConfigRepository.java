@@ -10,5 +10,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 public interface TenantToolConfigRepository extends JpaRepository<TenantToolConfig, UUID> {
     Optional<TenantToolConfig> findByTenantIdAndNameAndActiveTrue(UUID tenantId, String name);
 
+    Optional<TenantToolConfig> findByTenantIdAndName(UUID tenantId, String name);
+
     boolean existsByTenantIdAndName(UUID tenantId, String name);
 }

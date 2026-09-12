@@ -13,6 +13,7 @@ import java.util.Set;
 import com.example.demo.dto.ChatMessageRequest;
 import com.example.demo.dto.HostToolRequest;
 import com.example.demo.dto.HostToolResponse;
+import com.example.demo.model.ChatCommand;
 import com.example.demo.model.ChatSession;
 import com.example.demo.model.HostToolClientException;
 import com.example.demo.model.Tenant;
@@ -36,12 +37,14 @@ class FlowelleToolClientTest {
                 "test-secret",
                 Set.of("cycle:read"),
                 true);
-        ChatMessageRequest request = new ChatMessageRequest(
+        ChatCommand request = new ChatCommand(
+                java.util.UUID.randomUUID(),
                 "flowelle-user-1",
                 null,
                 "When is my next period?",
                 "en-US",
-                Set.of("cycle:read"));
+                Set.of("cycle:read"),
+                "jwt-correlation-id");
         when(hostToolClient.invoke(any(TenantToolConfig.class), any(HostToolRequest.class)))
                 .thenReturn(new HostToolResponse(
                         "cycle-summary",
@@ -75,6 +78,7 @@ class FlowelleToolClientTest {
         assertThat(requestCaptor.getValue().parameters())
                 .containsEntry("contractVersion", "flowelle.cycle-summary.v1")
                 .containsEntry("externalUserId", "flowelle-user-1");
+        assertThat(requestCaptor.getValue().authorizationJti()).isEqualTo("jwt-correlation-id");
         assertThat(requestCaptor.getValue().parameters().values())
                 .doesNotContain("When is my next period?");
     }

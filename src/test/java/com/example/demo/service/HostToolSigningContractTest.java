@@ -14,6 +14,7 @@ import com.example.demo.dto.HostToolRequest;
 import com.example.demo.model.Tenant;
 import com.example.demo.model.TenantToolConfig;
 import com.example.demo.security.HostToolSigner;
+import com.example.demo.security.EnvSecretResolver;
 import com.example.demo.support.ContractFixtures;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
@@ -30,13 +31,15 @@ class HostToolSigningContractTest {
     @Test
     void signsKnownFixtureBodyWithSharedHmacVector() {
         AiFriendProperties properties = new AiFriendProperties();
+        properties.getSecrets().setAllowLiteral(true);
         ObjectMapper objectMapper = new ObjectMapper();
         HostToolSigner signer = new HostToolSigner();
         RestTemplateHostToolClient client = new RestTemplateHostToolClient(
                 new RestTemplateBuilder(),
                 properties,
                 objectMapper,
-                signer);
+                signer,
+                new EnvSecretResolver(properties));
         RestTemplate restTemplate = (RestTemplate) ReflectionTestUtils.getField(client, "restTemplate");
         MockRestServiceServer server = MockRestServiceServer.bindTo(restTemplate).build();
 
@@ -45,7 +48,7 @@ class HostToolSigningContractTest {
                 tenant,
                 "cycle-summary",
                 "https://flowelle.example/api/aif/tools/cycle-summary",
-                "secret",
+                "literal://secret",
                 "dev-v1",
                 Set.of("cycle:read"),
                 true);
