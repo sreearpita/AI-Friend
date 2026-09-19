@@ -245,6 +245,62 @@ class ChatControllerIntegrationTest {
     }
 
     @Test
+    void chatRejectsMalformedJsonWithStableErrorContract() throws Exception {
+        mockMvc.perform(post("/v1/chat/messages")
+                        .header("X-AIF-Tenant-Key", API_KEY)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"externalUserId\":\"flowelle-user-1\",\"message\":"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("INVALID_REQUEST_BODY"))
+                .andExpect(jsonPath("$.requestId").isNotEmpty());
+    }
+
+    @Test
+    void chatRejectsUnknownSession() throws Exception {
+        mockMvc.perform(post("/v1/chat/messages")
+                        .header("X-AIF-Tenant-Key", API_KEY)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "externalUserId": "flowelle-user-1",
+                                  "sessionId": "%s",
+                                  "message": "Continue"
+                                }
+                                """.formatted(java.util.UUID.randomUUID())))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value("SESSION_NOT_FOUND"));
+    }
+
+    @Test
+    void chatRejectsSessionOwnedByAnotherUser() throws Exception {
+        MvcResult first = mockMvc.perform(post("/v1/chat/messages")
+                        .header("X-AIF-Tenant-Key", API_KEY)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "externalUserId": "flowelle-user-owner",
+                                  "message": "Hello"
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andReturn();
+        String sessionId = objectMapper.readTree(first.getResponse().getContentAsString()).get("sessionId").asText();
+
+        mockMvc.perform(post("/v1/chat/messages")
+                        .header("X-AIF-Tenant-Key", API_KEY)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "externalUserId": "flowelle-user-attacker",
+                                  "sessionId": "%s",
+                                  "message": "Read this session"
+                                }
+                                """.formatted(sessionId)))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("SESSION_USER_MISMATCH"));
+    }
+
+    @Test
     void redFlagPromptReturnsSafetyEscalationWithoutModelCall() throws Exception {
         mockMvc.perform(post("/v1/chat/messages")
                         .header("X-AIF-Tenant-Key", API_KEY)

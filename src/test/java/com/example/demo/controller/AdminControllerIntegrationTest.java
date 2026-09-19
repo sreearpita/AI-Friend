@@ -124,6 +124,13 @@ class AdminControllerIntegrationTest {
                 .andExpect(jsonPath("$.code").value("ADMIN_AUTH_INSUFFICIENT_ROLE"));
     }
 
+    @Test
+    void adminRequestWithoutBearerTokenIsRejected() throws Exception {
+        mockMvc.perform(get("/internal/admin/tenants/demo/api-keys"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value("ADMIN_AUTH_MISSING_TOKEN"));
+    }
+
     private static String token(String subject, List<String> roles) throws Exception {
         long now = Instant.now().getEpochSecond();
         String header = "{\"alg\":\"RS256\",\"kid\":\"%s\",\"typ\":\"JWT\"}".formatted(KEY_ID);

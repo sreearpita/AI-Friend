@@ -163,6 +163,57 @@ class ChatV2SecurityIntegrationTest {
     }
 
     @Test
+    void v2RequiresUserContextJwt() throws Exception {
+        mockMvc.perform(post("/v2/chat/messages")
+                        .header("X-AIF-Tenant-Key", API_KEY)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"message\":\"Hello\"}"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value("AUTH_MISSING_USER_CONTEXT"));
+    }
+
+    @Test
+    void v2RequiresWellnessChatScope() throws Exception {
+        String token = token("flowelle-user-no-scope", "jti-" + UUID.randomUUID(), "demo",
+                List.of("cycle:read"), 60);
+
+        mockMvc.perform(post("/v2/chat/messages")
+                        .header("X-AIF-Tenant-Key", API_KEY)
+                        .header(ChatController.USER_CONTEXT_HEADER, token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"message\":\"Hello\"}"))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("AUTH_INSUFFICIENT_SCOPE"));
+    }
+
+    @Test
+    void v2RejectsMalformedJsonBeforeCallingModel() throws Exception {
+        mockMvc.perform(post("/v2/chat/messages")
+                        .header("X-AIF-Tenant-Key", API_KEY)
+                        .header(ChatController.USER_CONTEXT_HEADER,
+                                token("flowelle-user-malformed", "jti-" + UUID.randomUUID(), "demo",
+                                        List.of("wellness:chat"), 60))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"message\":"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("INVALID_REQUEST_BODY"));
+    }
+
+    @Test
+    void v2RejectsExpiredUserContextToken() throws Exception {
+        String token = token("flowelle-user-expired", "jti-" + UUID.randomUUID(), "demo",
+                List.of("wellness:chat"), -1);
+
+        mockMvc.perform(post("/v2/chat/messages")
+                        .header("X-AIF-Tenant-Key", API_KEY)
+                        .header(ChatController.USER_CONTEXT_HEADER, token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"message\":\"Hello\"}"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value("AUTH_INVALID_USER_CONTEXT"));
+    }
+
+    @Test
     void v2AppliesUserRateLimitWithRetryHeader() throws Exception {
         String userId = "flowelle-user-limited-" + UUID.randomUUID();
         String firstToken = token(userId, "jti-" + UUID.randomUUID(), "demo", List.of("wellness:chat"), 60);

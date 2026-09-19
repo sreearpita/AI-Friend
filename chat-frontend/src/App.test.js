@@ -107,3 +107,52 @@ test('renders citations and tool call statuses from structured AI responses', as
   expect(screen.getByText(/user-preferences: COMPLETED/i)).toBeInTheDocument();
   expect(screen.getByText(/Used your Flowelle preferences/i)).toBeInTheDocument();
 });
+
+test('keeps the server session across turns and supports Enter to send', async () => {
+  global.fetch
+    .mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({
+        sessionId: 'session-1',
+        answer: 'First answer.',
+        safetyStatus: 'OK',
+        citations: [],
+        toolCalls: []
+      })
+    })
+    .mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({
+        sessionId: 'session-1',
+        answer: 'Second answer with history.',
+        safetyStatus: 'OK',
+        citations: [],
+        toolCalls: []
+      })
+    });
+
+  render(<App />);
+  const input = screen.getByPlaceholderText(/type your message/i);
+
+  await userEvent.type(input, 'First question');
+  await userEvent.keyboard('{Enter}');
+  expect(await screen.findByText('First answer.')).toBeInTheDocument();
+
+  await userEvent.type(input, 'Follow-up question');
+  await userEvent.keyboard('{Enter}');
+  expect(await screen.findByText('Second answer with history.')).toBeInTheDocument();
+
+  expect(global.fetch).toHaveBeenCalledTimes(2);
+  expect(JSON.parse(global.fetch.mock.calls[0][1].body).sessionId).toBeNull();
+  expect(JSON.parse(global.fetch.mock.calls[1][1].body).sessionId).toBe('session-1');
+});
+
+test('does not call the API for whitespace-only messages', async () => {
+  render(<App />);
+  const input = screen.getByPlaceholderText(/type your message/i);
+
+  await userEvent.type(input, '   ');
+  expect(screen.getByRole('button', { name: /send message/i })).toBeDisabled();
+
+  expect(global.fetch).not.toHaveBeenCalled();
+});
