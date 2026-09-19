@@ -115,11 +115,11 @@ class FlowelleContractFixtureTest {
     }
 
     private ChatSession session() {
-        return new ChatSession(tenant(), "flowelle-user-1");
+        return new ChatSession(tenant(), "42");
     }
 
     private ChatMessageRequest chatRequest(String message, Set<String> scopes) {
-        return new ChatMessageRequest("flowelle-user-1", null, message, "en-US", scopes);
+        return new ChatMessageRequest("42", null, message, "en-US", scopes);
     }
 
     private TenantToolConfig cycleSummaryConfig() {

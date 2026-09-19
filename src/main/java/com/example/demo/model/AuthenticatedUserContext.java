@@ -9,5 +9,6 @@ public record AuthenticatedUserContext(
         String jwtId,
         Instant issuedAt,
         Instant expiresAt,
-        Set<String> scopes) {
+        Set<String> scopes,
+        boolean aiCoachEnabled) {
 }

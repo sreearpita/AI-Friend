@@ -9,5 +9,16 @@ public record FlowelleCycleSummaryRequest(
         UUID sessionId,
         Set<String> scopes,
         String locale,
-        String contractVersion) {
+        String contractVersion,
+        String authorizationJti,
+        boolean aiCoachEnabled) {
+    public FlowelleCycleSummaryRequest(
+            UUID requestId,
+            String externalUserId,
+            UUID sessionId,
+            Set<String> scopes,
+            String locale,
+            String contractVersion) {
+        this(requestId, externalUserId, sessionId, scopes, locale, contractVersion, null, true);
+    }
 }

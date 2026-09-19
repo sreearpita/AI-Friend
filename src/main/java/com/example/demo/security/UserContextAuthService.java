@@ -70,7 +70,8 @@ public class UserContextAuthService {
                 claims.path("jti").asText(),
                 Instant.ofEpochSecond(claims.path("iat").asLong()),
                 Instant.ofEpochSecond(claims.path("exp").asLong()),
-                scopes);
+                scopes,
+                claims.path("aiCoachEnabled").asBoolean(false));
         requestGuardService.accept(tenant, userContext);
         return userContext;
     }

@@ -52,7 +52,9 @@ public class FlowelleToolClient {
                 session.getId(),
                 requestScopes,
                 localeOrDefault(command.locale()),
-                CYCLE_SUMMARY_CONTRACT);
+                CYCLE_SUMMARY_CONTRACT,
+                command.authorizationJti(),
+                command.aiCoachEnabled());
         HostToolResponse response = invoke(tenant, session, toolConfig, requestScopes, command.authorizationJti(), requestId, flowelleRequest);
         if (isNoData(response.status())) {
             return preserveNoDataResponse(CYCLE_SUMMARY_TOOL, response, "No cycle data is available yet.",
@@ -90,7 +92,9 @@ public class FlowelleToolClient {
                 session.getId(),
                 requestScopes,
                 localeOrDefault(command.locale()),
-                USER_PREFERENCES_CONTRACT);
+                USER_PREFERENCES_CONTRACT,
+                command.authorizationJti(),
+                command.aiCoachEnabled());
         HostToolResponse response = invoke(tenant, session, toolConfig, requestScopes, command.authorizationJti(), requestId, flowelleRequest);
         if (isNoData(response.status())) {
             return preserveNoDataResponse(USER_PREFERENCES_TOOL, response, "No preferences are available yet.",
@@ -131,6 +135,7 @@ public class FlowelleToolClient {
                 toolConfig.getName(),
                 requestScopes,
                 authorizationJti,
+                flowelleConsent(flowelleRequest),
                 locale(flowelleRequest),
                 objectMapper.convertValue(flowelleRequest, mapTypeReference));
         HostToolResponse response = hostToolClient.invoke(toolConfig, hostToolRequest);
@@ -209,5 +214,12 @@ public class FlowelleToolClient {
             return cycleSummaryRequest.locale();
         }
         return ((FlowelleUserPreferencesRequest) request).locale();
+    }
+
+    private boolean flowelleConsent(Object request) {
+        if (request instanceof FlowelleCycleSummaryRequest cycleSummaryRequest) {
+            return cycleSummaryRequest.aiCoachEnabled();
+        }
+        return ((FlowelleUserPreferencesRequest) request).aiCoachEnabled();
     }
 }

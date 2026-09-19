@@ -12,6 +12,7 @@ public record HostToolRequest(
         String toolName,
         Set<String> scopes,
         String authorizationJti,
+        boolean aiCoachEnabled,
         String locale,
         Map<String, Object> parameters) {
     public HostToolRequest(
@@ -23,6 +24,19 @@ public record HostToolRequest(
             Set<String> scopes,
             String locale,
             Map<String, Object> parameters) {
-        this(requestId, tenantSlug, externalUserId, sessionId, toolName, scopes, null, locale, parameters);
+        this(requestId, tenantSlug, externalUserId, sessionId, toolName, scopes, null, true, locale, parameters);
+    }
+
+    public HostToolRequest(
+            UUID requestId,
+            String tenantSlug,
+            String externalUserId,
+            UUID sessionId,
+            String toolName,
+            Set<String> scopes,
+            String authorizationJti,
+            String locale,
+            Map<String, Object> parameters) {
+        this(requestId, tenantSlug, externalUserId, sessionId, toolName, scopes, authorizationJti, true, locale, parameters);
     }
 }

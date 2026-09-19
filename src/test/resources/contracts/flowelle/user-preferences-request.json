@@ -1,17 +1,21 @@
 {
   "requestId": "00000000-0000-0000-0000-000000000003",
   "tenantSlug": "demo",
-  "externalUserId": "flowelle-user-1",
+  "externalUserId": "42",
   "sessionId": "00000000-0000-0000-0000-000000000002",
   "toolName": "user-preferences",
   "scopes": ["preferences:read"],
+  "authorizationJti": "jti-flowelle-42",
+  "aiCoachEnabled": true,
   "locale": "en-US",
   "parameters": {
     "requestId": "00000000-0000-0000-0000-000000000003",
-    "externalUserId": "flowelle-user-1",
+    "externalUserId": "42",
     "sessionId": "00000000-0000-0000-0000-000000000002",
     "scopes": ["preferences:read"],
     "locale": "en-US",
     "contractVersion": "flowelle.user-preferences.v1"
+    ,"authorizationJti": "jti-flowelle-42",
+    "aiCoachEnabled": true
   }
 }

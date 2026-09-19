@@ -47,6 +47,14 @@ public class ToolRegistryService {
         Set<String> requestScopes = normalizeScopes(command.scopes());
 
         for (String toolName : toolNames) {
+            if (!command.aiCoachEnabled()) {
+                toolCalls.add(new ToolCallResponse(
+                        toolName,
+                        "SKIPPED",
+                        "Flowelle data is unavailable because AI coaching consent is not enabled."));
+                platformMetrics.recordToolOutcome(tenant.getSlug(), toolName, "SKIPPED");
+                continue;
+            }
             tenantToolConfigRepository.findByTenantIdAndNameAndActiveTrue(tenant.getId(), toolName)
                     .ifPresentOrElse(
                             toolConfig -> invokeConfiguredTool(

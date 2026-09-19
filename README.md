@@ -208,6 +208,8 @@ Callback requests include:
 
 Tool calls are tenant-scoped and request-scope checked. In `/v2`, those scopes come from the verified user-context JWT. `cycle-summary` requires a configured scope such as `cycle:read`; `user-preferences` requires a configured scope such as `preferences:read`. If a tool is missing, disabled, denied by scope, times out, or fails, the chat flow continues with a safe `SKIPPED` or `FAILED` tool call summary and general model context.
 
+For the Flowelle tenant, the verified user-context JWT uses a numeric Flowelle database user ID in `sub`. AI-Friend keeps this as a string in its generic identity model and forwards only that verified value. The JWT must include `aiCoachEnabled`; a missing or false claim leaves general wellness chat available but prevents Flowelle callbacks and facts for that request.
+
 Tool signing secrets are resolved from `TenantToolConfig.secretRef`. Milestone 6 supports `env://VARIABLE_NAME`; resolved secret values are not returned by APIs or written to audit logs. The legacy plaintext `signing_secret` column is cleared by migration and retained only as a migration bridge.
 
 ## Admin API
@@ -344,7 +346,6 @@ Implemented:
 
 Still placeholder or future work:
 
-- Flowelle backend proxy for issuing one-request user-context JWTs and enforcing `aiCoachEnabled`
 - pgvector embeddings and semantic retrieval
 - Streaming responses
 - Production deployment packaging

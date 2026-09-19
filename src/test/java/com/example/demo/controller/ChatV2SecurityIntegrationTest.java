@@ -26,6 +26,7 @@ import com.example.demo.repository.ChatSessionRepository;
 import com.example.demo.repository.ChatMessageRepository;
 import com.example.demo.repository.TenantRepository;
 import com.example.demo.repository.TenantUserAuthConfigRepository;
+import com.example.demo.service.FlowelleToolClient;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -66,6 +67,9 @@ class ChatV2SecurityIntegrationTest {
     @MockBean
     private ModelClient modelClient;
 
+    @MockBean
+    private FlowelleToolClient flowelleToolClient;
+
     private KeyPair keyPair;
     private Tenant tenant;
 
@@ -90,7 +94,7 @@ class ChatV2SecurityIntegrationTest {
 
     @Test
     void v2UsesTokenIdentityAndIgnoresRequestIdentityFields() throws Exception {
-        String token = token("flowelle-user-token", "jti-" + UUID.randomUUID(), "demo",
+        String token = token("42", "jti-" + UUID.randomUUID(), "demo",
                 List.of("wellness:chat", "cycle:read", "preferences:read"), 60);
 
         MvcResult result = mockMvc.perform(post("/v2/chat/messages")
@@ -115,7 +119,41 @@ class ChatV2SecurityIntegrationTest {
                 .get("sessionId")
                 .asText();
         assertThat(chatSessionRepository.findById(UUID.fromString(sessionId)).orElseThrow().getExternalUserId())
-                .isEqualTo("flowelle-user-token");
+                .isEqualTo("42");
+    }
+
+    @Test
+    void v2AllowsGeneralChatButSkipsFlowelleWhenConsentIsDisabled() throws Exception {
+        String token = token("4201", "jti-" + UUID.randomUUID(), "demo",
+                List.of("wellness:chat", "cycle:read"), 60, false);
+
+        mockMvc.perform(post("/v2/chat/messages")
+                        .header("X-AIF-Tenant-Key", API_KEY)
+                        .header(ChatController.USER_CONTEXT_HEADER, token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"message\":\"When is my next period?\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.answer").value("A v2 grounded answer."))
+                .andExpect(jsonPath("$.toolCalls[0].status").value("SKIPPED"))
+                .andExpect(jsonPath("$.toolCalls[0].summary").value("Flowelle data is unavailable because AI coaching consent is not enabled."));
+
+        org.mockito.Mockito.verifyNoInteractions(flowelleToolClient);
+    }
+
+    @Test
+    void v2TreatsMissingConsentClaimAsDisabled() throws Exception {
+        String token = tokenWithoutConsent("4202", "jti-" + UUID.randomUUID(), "demo",
+                List.of("wellness:chat", "cycle:read"), 60);
+
+        mockMvc.perform(post("/v2/chat/messages")
+                        .header("X-AIF-Tenant-Key", API_KEY)
+                        .header(ChatController.USER_CONTEXT_HEADER, token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"message\":\"When is my next period?\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.toolCalls[0].status").value("SKIPPED"));
+
+        org.mockito.Mockito.verifyNoInteractions(flowelleToolClient);
     }
 
     @Test
@@ -248,12 +286,30 @@ class ChatV2SecurityIntegrationTest {
     }
 
     private String token(String subject, String jwtId, String tenantSlug, List<String> scopes, long lifetimeSeconds) throws Exception {
+        return token(subject, jwtId, tenantSlug, scopes, lifetimeSeconds, true);
+    }
+
+    private String token(String subject, String jwtId, String tenantSlug, List<String> scopes, long lifetimeSeconds, boolean aiCoachEnabled) throws Exception {
+        long now = Instant.now().getEpochSecond();
+        String header = "{\"alg\":\"RS256\",\"kid\":\"%s\",\"typ\":\"JWT\"}".formatted(KEY_ID);
+        String scopeJson = scopes.stream().map(scope -> "\"" + scope + "\"").reduce((left, right) -> left + "," + right).orElse("");
+        String claims = """
+                {"iss":"%s","sub":"%s","aud":"ai-friend-chat","iat":%d,"exp":%d,"jti":"%s","tenant":"%s","scope":[%s],"aiCoachEnabled":%s}
+                """.formatted(ISSUER, subject, now, now + lifetimeSeconds, jwtId, tenantSlug, scopeJson, aiCoachEnabled).trim();
+        return signedToken(header, claims);
+    }
+
+    private String tokenWithoutConsent(String subject, String jwtId, String tenantSlug, List<String> scopes, long lifetimeSeconds) throws Exception {
         long now = Instant.now().getEpochSecond();
         String header = "{\"alg\":\"RS256\",\"kid\":\"%s\",\"typ\":\"JWT\"}".formatted(KEY_ID);
         String scopeJson = scopes.stream().map(scope -> "\"" + scope + "\"").reduce((left, right) -> left + "," + right).orElse("");
         String claims = """
                 {"iss":"%s","sub":"%s","aud":"ai-friend-chat","iat":%d,"exp":%d,"jti":"%s","tenant":"%s","scope":[%s]}
                 """.formatted(ISSUER, subject, now, now + lifetimeSeconds, jwtId, tenantSlug, scopeJson).trim();
+        return signedToken(header, claims);
+    }
+
+    private String signedToken(String header, String claims) throws Exception {
         String signingInput = base64Url(header.getBytes(StandardCharsets.UTF_8))
                 + "."
                 + base64Url(claims.getBytes(StandardCharsets.UTF_8));

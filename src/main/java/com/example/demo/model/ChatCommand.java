@@ -13,7 +13,19 @@ public record ChatCommand(
         String message,
         String locale,
         Set<String> scopes,
-        String authorizationJti) {
+        String authorizationJti,
+        boolean aiCoachEnabled) {
+    public ChatCommand(
+            UUID requestId,
+            String externalUserId,
+            UUID sessionId,
+            String message,
+            String locale,
+            Set<String> scopes,
+            String authorizationJti) {
+        this(requestId, externalUserId, sessionId, message, locale, scopes, authorizationJti, true);
+    }
+
     public static ChatCommand fromV1(ChatMessageRequest request) {
         return new ChatCommand(
                 UUID.randomUUID(),
@@ -22,7 +34,8 @@ public record ChatCommand(
                 request.message(),
                 request.locale(),
                 request.scopes(),
-                null);
+                null,
+                true);
     }
 
     public static ChatCommand fromV2(ChatV2MessageRequest request, AuthenticatedUserContext userContext) {
@@ -33,6 +46,7 @@ public record ChatCommand(
                 request.message(),
                 request.locale(),
                 userContext.scopes(),
-                userContext.jwtId());
+                userContext.jwtId(),
+                userContext.aiCoachEnabled());
     }
 }

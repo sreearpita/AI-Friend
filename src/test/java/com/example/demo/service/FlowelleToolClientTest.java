@@ -79,6 +79,9 @@ class FlowelleToolClientTest {
                 .containsEntry("contractVersion", "flowelle.cycle-summary.v1")
                 .containsEntry("externalUserId", "flowelle-user-1");
         assertThat(requestCaptor.getValue().authorizationJti()).isEqualTo("jwt-correlation-id");
+        assertThat(requestCaptor.getValue().aiCoachEnabled()).isTrue();
+        assertThat(requestCaptor.getValue().parameters()).containsEntry("authorizationJti", "jwt-correlation-id");
+        assertThat(requestCaptor.getValue().parameters()).containsEntry("aiCoachEnabled", true);
         assertThat(requestCaptor.getValue().parameters().values())
                 .doesNotContain("When is my next period?");
     }

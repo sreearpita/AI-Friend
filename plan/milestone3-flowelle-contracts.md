@@ -1,5 +1,11 @@
 # Milestone 3 Flowelle Contract Hardening Plan
 
+## Current implementation status
+
+AI-Friend now maps `aiCoachEnabled` from the verified user-context JWT, defaults a missing claim to disabled, and skips Flowelle tools before callback construction when consent is absent. Callback envelopes include the verified authorization JTI and consent state. Flowelle identities are represented as numeric strings, while the generic AI-Friend identity remains a string.
+
+The sibling Flowelle repository now contains the matching JWT subject migration, callback consent validation, persistent request-ID replay protection, and an authenticated AI-Friend proxy. Remaining work is deployment configuration and live environment verification.
+
 ## Summary
 
 Align AI-Friend's host-tool callback layer with the real Flowelle app. Flowelle remains the source of truth for raw cycle, symptom, prediction, profile, and preference data. AI-Friend consumes only signed, typed summaries that are safe to include in model prompts.
@@ -12,7 +18,8 @@ The `sreearpita/Flowelle` repository currently contains:
 - `backend/cycles-service`: Spring Boot service for cycle tracking, daily logs, symptoms, and predictions.
 - `frontend`: React TypeScript client.
 - No checked-in API gateway implementation.
-- No checked-in AI-Friend-specific server-to-server callback endpoints yet.
+- AI-Friend callback endpoints are implemented in both backend services.
+- Auth service exposes an authenticated `/api/aif/chat/messages` proxy and `/.well-known/jwks.json` for short-lived user-context tokens.
 
 Relevant current Flowelle endpoints:
 
@@ -56,6 +63,8 @@ Required headers:
 - `X-AIF-Request-Id`
 - `X-AIF-Key-Id`
 
+The envelope also carries `authorizationJti` and `aiCoachEnabled`. Flowelle's tenant-specific `externalUserId` is the numeric user ID from the verified Flowelle JWT `sub` claim.
+
 ## Scope Rules
 
 - `cycle-summary` should require `cycle:read`.
@@ -71,22 +80,27 @@ Implemented:
 - `FlowelleToolClient` adapter over signed host-tool callbacks.
 - Key id support via `TenantToolConfig.signingKeyId` and `X-AIF-Key-Id`.
 - Strict configured-scope checks for Flowelle tools.
+- Consent-aware v2 dispatch: missing or false `aiCoachEnabled` leaves general chat available but returns consent-required `SKIPPED` tool calls without invoking Flowelle.
+- Authorization JTI and consent propagation in typed callback bodies.
 - Tests for typed mapping, malformed responses, signing headers, scope denial, tool failure, prompt context, and audit redaction.
 
-## Flowelle Repo Follow-Up
+## Flowelle Implementation Status
 
-Flowelle should add server-to-server endpoints that accept AI-Friend signed callbacks, verify `X-AIF-*` headers, and return the typed summary responses:
+Flowelle now has server-to-server endpoints that accept AI-Friend signed callbacks, verify `X-AIF-*` headers, and return the typed summary responses:
 
 - `POST /api/aif/tools/cycle-summary`
 - `POST /api/aif/tools/user-preferences`
 
-Those endpoints should:
+Those endpoints:
 
 - authenticate via shared callback secret/key id, not user browser JWT alone,
 - map AI-Friend `externalUserId` to Flowelle user id,
 - enforce consent/scopes inside Flowelle,
 - return summaries and bounded facts only,
 - avoid returning raw health logs unless explicitly required and approved.
+- reject nonnumeric or unauthorized external identities.
+- reject missing consent before business processing.
+- reject duplicate request IDs using a persistent nonce table.
 
 ## Non-Goals
 
@@ -104,7 +118,7 @@ Run:
 cd chat-frontend && CI=true npm test -- --watchAll=false
 ```
 
-Manual integration once Flowelle callback endpoints exist:
+Manual integration after deployment configuration:
 
 - Configure AI-Friend callback URLs to Flowelle service endpoints.
 - Send "When is my next period?" with `cycle:read`.
@@ -112,3 +126,4 @@ Manual integration once Flowelle callback endpoints exist:
 - Send without `cycle:read`.
 - Confirm `cycle-summary` returns `SKIPPED`.
 - Confirm logs/audit metadata do not contain raw Flowelle payloads.
+- Configure `AIFRIEND_URL`, `AIFRIEND_TENANT_KEY`, and the RS256 user-context private key in the Flowelle auth service.
