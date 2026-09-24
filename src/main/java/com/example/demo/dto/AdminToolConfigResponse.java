@@ -10,6 +10,7 @@ public record AdminToolConfigResponse(
         String callbackUrl,
         String secretRef,
         String signingKeyId,
+        String contractVersion,
         Set<String> allowedScopes,
         boolean active) {
 }

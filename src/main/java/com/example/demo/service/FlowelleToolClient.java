@@ -8,6 +8,10 @@ import com.example.demo.dto.FlowelleCycleSummaryRequest;
 import com.example.demo.dto.FlowelleCycleSummaryResponse;
 import com.example.demo.dto.FlowelleUserPreferencesRequest;
 import com.example.demo.dto.FlowelleUserPreferencesResponse;
+import com.example.demo.dto.FlowelleContextRequest;
+import com.example.demo.dto.FlowelleNutritionProfileResponse;
+import com.example.demo.dto.FlowelleExerciseProfileResponse;
+import com.example.demo.dto.FlowelleWellnessSignalsResponse;
 import com.example.demo.dto.ChatMessageRequest;
 import com.example.demo.dto.HostToolRequest;
 import com.example.demo.dto.HostToolResponse;
@@ -26,6 +30,9 @@ import org.springframework.util.StringUtils;
 public class FlowelleToolClient {
     public static final String CYCLE_SUMMARY_TOOL = "cycle-summary";
     public static final String USER_PREFERENCES_TOOL = "user-preferences";
+    public static final String NUTRITION_PROFILE_TOOL = "nutrition-profile";
+    public static final String EXERCISE_PROFILE_TOOL = "exercise-profile";
+    public static final String SIGNALS_TOOL = "recent-wellness-signals";
     private static final String CYCLE_SUMMARY_CONTRACT = "flowelle.cycle-summary.v1";
     private static final String USER_PREFERENCES_CONTRACT = "flowelle.user-preferences.v1";
 
@@ -108,6 +115,43 @@ public class FlowelleToolClient {
                 firstText(typedResponse.summary(), response.summary(), "Flowelle preferences returned."),
                 objectMapper.convertValue(typedResponse, mapTypeReference),
                 firstText(typedResponse.userExplanation(), response.userExplanation(), "Used Flowelle preferences."));
+    }
+
+    public HostToolResponse fetchNutritionProfile(Tenant tenant, ChatSession session, ChatCommand command,
+            TenantToolConfig toolConfig, Set<String> requestScopes) {
+        return fetchContext(tenant, session, command, toolConfig, requestScopes, NUTRITION_PROFILE_TOOL,
+                "flowelle.nutrition-profile.v1", FlowelleNutritionProfileResponse.class,
+                "No nutrition profile is available yet.");
+    }
+
+    public HostToolResponse fetchExerciseProfile(Tenant tenant, ChatSession session, ChatCommand command,
+            TenantToolConfig toolConfig, Set<String> requestScopes) {
+        return fetchContext(tenant, session, command, toolConfig, requestScopes, EXERCISE_PROFILE_TOOL,
+                "flowelle.exercise-profile.v1", FlowelleExerciseProfileResponse.class,
+                "No exercise profile is available yet.");
+    }
+
+    public HostToolResponse fetchSignals(Tenant tenant, ChatSession session, ChatCommand command,
+            TenantToolConfig toolConfig, Set<String> requestScopes) {
+        return fetchContext(tenant, session, command, toolConfig, requestScopes, SIGNALS_TOOL,
+                "flowelle.recent-wellness-signals.v1", FlowelleWellnessSignalsResponse.class,
+                "No recent wellness signals are available yet.");
+    }
+
+    private <T> HostToolResponse fetchContext(Tenant tenant, ChatSession session, ChatCommand command,
+            TenantToolConfig toolConfig, Set<String> requestScopes, String toolName, String contractVersion,
+            Class<T> responseType, String fallback) {
+        UUID requestId = UUID.randomUUID();
+        FlowelleContextRequest request = new FlowelleContextRequest(requestId, command.externalUserId(), session.getId(),
+                requestScopes, localeOrDefault(command.locale()), contractVersion, command.authorizationJti(),
+                command.aiCoachEnabled(), Map.of("lookbackDays", 30));
+        HostToolResponse response = invoke(tenant, session, toolConfig, requestScopes, command.authorizationJti(), requestId, request);
+        if (isNoData(response.status())) return preserveNoDataResponse(toolName, response, fallback,
+                "I could not find enough Flowelle context to personalize this answer.");
+        T typed = convertFacts(response, responseType);
+        Map<String, Object> facts = objectMapper.convertValue(typed, mapTypeReference);
+        return new HostToolResponse(toolName, response.status(), firstText((String) facts.get("summary"), response.summary(), fallback),
+                facts, firstText((String) facts.get("userExplanation"), response.userExplanation(), "Used Flowelle context."));
     }
 
     public HostToolResponse fetchUserPreferences(
@@ -206,20 +250,23 @@ public class FlowelleToolClient {
         if (request instanceof FlowelleCycleSummaryRequest cycleSummaryRequest) {
             return cycleSummaryRequest.externalUserId();
         }
-        return ((FlowelleUserPreferencesRequest) request).externalUserId();
+        if (request instanceof FlowelleUserPreferencesRequest preferencesRequest) return preferencesRequest.externalUserId();
+        return ((FlowelleContextRequest) request).externalUserId();
     }
 
     private String locale(Object request) {
         if (request instanceof FlowelleCycleSummaryRequest cycleSummaryRequest) {
             return cycleSummaryRequest.locale();
         }
-        return ((FlowelleUserPreferencesRequest) request).locale();
+        if (request instanceof FlowelleUserPreferencesRequest preferencesRequest) return preferencesRequest.locale();
+        return ((FlowelleContextRequest) request).locale();
     }
 
     private boolean flowelleConsent(Object request) {
         if (request instanceof FlowelleCycleSummaryRequest cycleSummaryRequest) {
             return cycleSummaryRequest.aiCoachEnabled();
         }
-        return ((FlowelleUserPreferencesRequest) request).aiCoachEnabled();
+        if (request instanceof FlowelleUserPreferencesRequest preferencesRequest) return preferencesRequest.aiCoachEnabled();
+        return ((FlowelleContextRequest) request).aiCoachEnabled();
     }
 }

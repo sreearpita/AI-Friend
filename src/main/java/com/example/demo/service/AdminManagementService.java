@@ -11,6 +11,8 @@ import com.example.demo.dto.AdminTenantResponse;
 import com.example.demo.dto.AdminToolConfigRequest;
 import com.example.demo.dto.AdminToolConfigResponse;
 import com.example.demo.dto.AdminUserAuthConfigRequest;
+import com.example.demo.dto.AdminCapabilityRequest;
+import com.example.demo.dto.AdminCapabilityResponse;
 import com.example.demo.exception.ApiException;
 import com.example.demo.model.ApiKey;
 import com.example.demo.model.Tenant;
@@ -20,6 +22,8 @@ import com.example.demo.repository.ApiKeyRepository;
 import com.example.demo.repository.TenantRepository;
 import com.example.demo.repository.TenantToolConfigRepository;
 import com.example.demo.repository.TenantUserAuthConfigRepository;
+import com.example.demo.repository.TenantCapabilityRepository;
+import com.example.demo.model.TenantCapability;
 import com.example.demo.security.ApiKeyGenerator;
 import com.example.demo.security.ApiKeyHasher;
 
@@ -34,6 +38,7 @@ public class AdminManagementService {
     private final ApiKeyRepository apiKeyRepository;
     private final TenantUserAuthConfigRepository authConfigRepository;
     private final TenantToolConfigRepository toolConfigRepository;
+    private final TenantCapabilityRepository capabilityRepository;
     private final ApiKeyHasher apiKeyHasher;
     private final ApiKeyGenerator apiKeyGenerator;
     private final AuditService auditService;
@@ -43,6 +48,7 @@ public class AdminManagementService {
             ApiKeyRepository apiKeyRepository,
             TenantUserAuthConfigRepository authConfigRepository,
             TenantToolConfigRepository toolConfigRepository,
+            TenantCapabilityRepository capabilityRepository,
             ApiKeyHasher apiKeyHasher,
             ApiKeyGenerator apiKeyGenerator,
             AuditService auditService) {
@@ -50,6 +56,7 @@ public class AdminManagementService {
         this.apiKeyRepository = apiKeyRepository;
         this.authConfigRepository = authConfigRepository;
         this.toolConfigRepository = toolConfigRepository;
+        this.capabilityRepository = capabilityRepository;
         this.apiKeyHasher = apiKeyHasher;
         this.apiKeyGenerator = apiKeyGenerator;
         this.auditService = auditService;
@@ -111,12 +118,14 @@ public class AdminManagementService {
                         request.callbackUrl(),
                         request.secretRef(),
                         request.signingKeyId(),
+                        request.contractVersion(),
                         request.allowedScopes(),
                         request.active())));
         config.update(
                 request.callbackUrl(),
                 request.secretRef(),
                 request.signingKeyId(),
+                request.contractVersion(),
                 request.allowedScopes(),
                 request.active());
         auditService.record(tenant, actor, null, "admin.tool-config.upsert", java.util.Map.of("tenantSlug", tenantSlug, "tool", request.name()));
@@ -179,7 +188,42 @@ public class AdminManagementService {
                 config.getCallbackUrl(),
                 config.getSecretRef(),
                 config.getSigningKeyId(),
+                config.getContractVersion(),
                 config.getAllowedScopes(),
                 config.isActive());
+    }
+
+    @Transactional
+    public AdminCapabilityResponse configureCapability(String tenantSlug, String capabilityKey,
+            AdminCapabilityRequest request, String actor) {
+        Tenant tenant = requireTenant(tenantSlug);
+        if (capabilityKey == null || capabilityKey.isBlank() || capabilityKey.length() > 100) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "INVALID_CAPABILITY_KEY", "Capability key is invalid.");
+        }
+        if (request.priority() < 0 || request.priority() > 10000) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "INVALID_PRIORITY", "Capability priority must be between 0 and 10000.");
+        }
+        TenantCapability capability = capabilityRepository.findByTenantIdAndCapabilityKey(tenant.getId(), capabilityKey)
+                .orElseGet(() -> capabilityRepository.save(new TenantCapability(tenant, capabilityKey,
+                        request.displayName(), request.description(), request.triggerPhrases(), request.requiredScopes(),
+                        request.toolNames(), request.retrievalTopics(), request.priority(), request.active())));
+        capability.update(request.displayName(), request.description(), request.triggerPhrases(), request.requiredScopes(),
+                request.toolNames(), request.retrievalTopics(), request.priority(), request.active());
+        auditService.record(tenant, actor, null, "admin.capability.upsert", java.util.Map.of("tenantSlug", tenantSlug, "capability", capabilityKey));
+        return capabilityResponse(tenant, capability);
+    }
+
+    @Transactional(readOnly = true)
+    public List<AdminCapabilityResponse> listCapabilities(String tenantSlug) {
+        Tenant tenant = requireTenant(tenantSlug);
+        return capabilityRepository.findByTenantIdAndActiveTrueOrderByPriorityAscCapabilityKeyAsc(tenant.getId())
+                .stream().map(capability -> capabilityResponse(tenant, capability)).toList();
+    }
+
+    private AdminCapabilityResponse capabilityResponse(Tenant tenant, TenantCapability capability) {
+        return new AdminCapabilityResponse(capability.getId(), tenant.getSlug(), capability.getCapabilityKey(),
+                capability.getDisplayName(), capability.getDescription(), capability.getTriggerPhrases(),
+                capability.getRequiredScopes(), capability.getToolNames(), capability.getRetrievalTopics(),
+                capability.getPriority(), capability.isActive());
     }
 }

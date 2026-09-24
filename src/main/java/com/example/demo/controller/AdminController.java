@@ -6,6 +6,8 @@ import java.util.UUID;
 import com.example.demo.dto.AdminApiKeyCreateRequest;
 import com.example.demo.dto.AdminApiKeyCreateResponse;
 import com.example.demo.dto.AdminApiKeyMetadataResponse;
+import com.example.demo.dto.AdminCapabilityRequest;
+import com.example.demo.dto.AdminCapabilityResponse;
 import com.example.demo.dto.AdminTenantRequest;
 import com.example.demo.dto.AdminTenantResponse;
 import com.example.demo.dto.AdminToolConfigRequest;
@@ -59,8 +61,22 @@ public class AdminController {
             @Valid @RequestBody AdminToolConfigRequest request) {
         return adminManagementService.configureTool(
                 tenantSlug,
-                new AdminToolConfigRequest(toolName, request.callbackUrl(), request.secretRef(), request.signingKeyId(), request.allowedScopes(), request.active()),
+                new AdminToolConfigRequest(toolName, request.callbackUrl(), request.secretRef(), request.signingKeyId(), request.contractVersion(), request.allowedScopes(), request.active()),
                 actor);
+    }
+
+    @PutMapping("/internal/admin/tenants/{tenantSlug}/capabilities/{capabilityKey}")
+    public AdminCapabilityResponse configureCapability(
+            @PathVariable String tenantSlug,
+            @PathVariable String capabilityKey,
+            @RequestAttribute(AdminAuthInterceptor.ADMIN_ACTOR_ATTRIBUTE) String actor,
+            @Valid @RequestBody AdminCapabilityRequest request) {
+        return adminManagementService.configureCapability(tenantSlug, capabilityKey, request, actor);
+    }
+
+    @org.springframework.web.bind.annotation.GetMapping("/internal/admin/tenants/{tenantSlug}/capabilities")
+    public List<AdminCapabilityResponse> listCapabilities(@PathVariable String tenantSlug) {
+        return adminManagementService.listCapabilities(tenantSlug);
     }
 
     @PostMapping("/internal/admin/tenants/{tenantSlug}/api-keys")

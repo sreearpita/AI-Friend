@@ -44,6 +44,9 @@ public class TenantToolConfig {
     @Column(nullable = false, length = 80)
     private String signingKeyId = "dev-v1";
 
+    @Column(nullable = false, length = 160)
+    private String contractVersion = "generic.host-tool.v1";
+
     @ElementCollection(fetch = FetchType.EAGER)
     @CollectionTable(name = "tenant_tool_allowed_scopes", joinColumns = @JoinColumn(name = "tool_config_id"))
     @Column(name = "scope", nullable = false, length = 80)
@@ -66,12 +69,26 @@ public class TenantToolConfig {
             String signingKeyId,
             Set<String> allowedScopes,
             boolean active) {
+        this(tenant, name, callbackUrl, secretRef, signingKeyId, "generic.host-tool.v1", allowedScopes, active);
+    }
+
+    public TenantToolConfig(
+            Tenant tenant,
+            String name,
+            String callbackUrl,
+            String secretRef,
+            String signingKeyId,
+            String contractVersion,
+            Set<String> allowedScopes,
+            boolean active) {
         this.tenant = tenant;
         this.name = name;
         this.callbackUrl = callbackUrl;
         this.signingSecret = "";
         this.secretRef = secretRef;
         this.signingKeyId = signingKeyId;
+        this.contractVersion = contractVersion == null || contractVersion.isBlank()
+                ? "generic.host-tool.v1" : contractVersion;
         this.allowedScopes = allowedScopes == null ? new HashSet<>() : new HashSet<>(allowedScopes);
         this.active = active;
     }
@@ -83,7 +100,7 @@ public class TenantToolConfig {
             String secretRef,
             Set<String> allowedScopes,
             boolean active) {
-        this(tenant, name, callbackUrl, secretRef, "dev-v1", allowedScopes, active);
+        this(tenant, name, callbackUrl, secretRef, "dev-v1", "generic.host-tool.v1", allowedScopes, active);
     }
 
     @PrePersist
@@ -117,6 +134,10 @@ public class TenantToolConfig {
         return signingKeyId;
     }
 
+    public String getContractVersion() {
+        return contractVersion;
+    }
+
     public Set<String> getAllowedScopes() {
         return allowedScopes;
     }
@@ -129,12 +150,24 @@ public class TenantToolConfig {
             String callbackUrl,
             String secretRef,
             String signingKeyId,
+            String contractVersion,
             Set<String> allowedScopes,
             boolean active) {
         this.callbackUrl = callbackUrl;
         this.secretRef = secretRef;
         this.signingKeyId = signingKeyId;
+        this.contractVersion = contractVersion == null || contractVersion.isBlank()
+                ? "generic.host-tool.v1" : contractVersion;
         this.allowedScopes = allowedScopes == null ? new HashSet<>() : new HashSet<>(allowedScopes);
         this.active = active;
+    }
+
+    public void update(
+            String callbackUrl,
+            String secretRef,
+            String signingKeyId,
+            Set<String> allowedScopes,
+            boolean active) {
+        update(callbackUrl, secretRef, signingKeyId, this.contractVersion, allowedScopes, active);
     }
 }

@@ -146,10 +146,13 @@ async function configureAiFriend(adminKeys) {
   }, 200, 'configure user authentication');
 
   const tools = [
-    ['cycle-summary', 'http://flowelle-cycles:8082/api/aif/tools/cycle-summary', ['cycle:read']],
-    ['user-preferences', 'http://flowelle-auth:8081/api/aif/tools/user-preferences', ['preferences:read']],
+    ['cycle-summary', 'http://flowelle-cycles:8082/api/aif/tools/cycle-summary', ['cycle:read'], 'flowelle.cycle-summary.v1'],
+    ['user-preferences', 'http://flowelle-auth:8081/api/aif/tools/user-preferences', ['preferences:read'], 'flowelle.user-preferences.v1'],
+    ['nutrition-profile', 'http://flowelle-auth:8081/api/aif/tools/nutrition-profile', ['nutrition:read'], 'flowelle.nutrition-profile.v1'],
+    ['exercise-profile', 'http://flowelle-auth:8081/api/aif/tools/exercise-profile', ['exercise:read'], 'flowelle.exercise-profile.v1'],
+    ['recent-wellness-signals', 'http://flowelle-cycles:8082/api/aif/tools/recent-wellness-signals', ['signals:read'], 'flowelle.recent-wellness-signals.v1'],
   ];
-  for (const [name, callbackUrl, scopes] of tools) {
+  for (const [name, callbackUrl, scopes, contractVersion] of tools) {
     await expectStatus(`${aiFriendUrl}/internal/admin/tenants/${tenantSlug}/tools/${name}`, {
       method: 'PUT', headers,
       body: JSON.stringify({
@@ -157,10 +160,24 @@ async function configureAiFriend(adminKeys) {
         callbackUrl,
         secretRef: 'env://E2E_AIF_CALLBACK_SECRET',
         signingKeyId: callbackKeyId,
+        contractVersion,
         allowedScopes: scopes,
         active: true,
       }),
     }, 200, `configure ${name}`);
+  }
+
+  const capabilities = [
+    ['cycle-insights', 'Cycle insights', ['next period', 'cycle length', 'cycle stats'], ['cycle:read'], ['cycle-summary'], ['menstrual-cycle']],
+    ['profile-preferences', 'Profile preferences', ['preferences', 'profile'], ['preferences:read'], ['user-preferences'], []],
+    ['nutrition-guidance', 'Nutrition guidance', ['food', 'diet', 'nutrition', 'pms nutrition'], ['nutrition:read', 'cycle:read', 'signals:read'], ['nutrition-profile', 'cycle-summary', 'recent-wellness-signals'], ['pms-nutrition']],
+    ['exercise-guidance', 'Exercise guidance', ['exercise', 'movement', 'workout'], ['exercise:read', 'cycle:read', 'signals:read'], ['exercise-profile', 'cycle-summary', 'recent-wellness-signals'], ['period-exercise']],
+  ];
+  for (const [key, displayName, triggerPhrases, requiredScopes, toolNames, retrievalTopics] of capabilities) {
+    await expectStatus(`${aiFriendUrl}/internal/admin/tenants/${tenantSlug}/capabilities/${key}`, {
+      method: 'PUT', headers,
+      body: JSON.stringify({ displayName, description: `${displayName} for Flowelle users`, triggerPhrases, requiredScopes, toolNames, retrievalTopics, priority: 100, active: true }),
+    }, 200, `configure ${key}`);
   }
 }
 
@@ -185,7 +202,12 @@ async function registerUser() {
     }),
   }, 200, 'register Flowelle user');
   assert(body?.token && body?.user?.id, `Registration did not return token and numeric user: ${JSON.stringify(body)}`);
-  return { email, password, userId: String(body.user.id), token: body.token };
+  const user = { email, password, userId: String(body.user.id), token: body.token };
+  await expectStatus(`${authUrl}/auth/me/wellness-profile`, {
+    method: 'PUT', headers: { Authorization: `Bearer ${user.token}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ dietaryPattern: 'VEGETARIAN', activityLevel: 'MODERATE', allergens: ['PEANUT'], intolerances: [], nutritionGoals: ['PMS_SUPPORT', 'HYDRATION'], preferredActivities: ['WALKING', 'YOGA'], exerciseGoals: ['GENTLE_MOVEMENT'], exerciseLimitations: [] }),
+  }, 200, 'save wellness profile');
+  return user;
 }
 
 async function setConsent(user, enabled) {
@@ -217,7 +239,9 @@ async function testFullConsent(user) {
   assert(typeof body.answer === 'string' && body.answer.length > 0, 'Consent-enabled answer is empty');
   const calls = findToolCalls(body);
   assert(findTool(calls, 'cycle-summary')?.status === 'COMPLETED', `Cycle tool did not complete: ${JSON.stringify(calls)}`);
-  assert(findTool(calls, 'user-preferences')?.status === 'COMPLETED', `Preferences tool did not complete: ${JSON.stringify(calls)}`);
+  assert(findTool(calls, 'nutrition-profile')?.status === 'COMPLETED', `Nutrition tool did not complete: ${JSON.stringify(calls)}`);
+  assert(findTool(calls, 'exercise-profile')?.status === 'COMPLETED', `Exercise tool did not complete: ${JSON.stringify(calls)}`);
+  assert(findTool(calls, 'recent-wellness-signals')?.status === 'NO_DATA' || findTool(calls, 'recent-wellness-signals')?.status === 'COMPLETED', `Signals tool did not return a valid bounded outcome: ${JSON.stringify(calls)}`);
   assert(!JSON.stringify(body).includes('E2e-password-123!'), 'Password leaked into response');
 }
 

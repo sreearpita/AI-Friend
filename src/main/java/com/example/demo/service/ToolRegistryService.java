@@ -17,8 +17,11 @@ import com.example.demo.model.Tenant;
 import com.example.demo.model.TenantToolConfig;
 import com.example.demo.model.ToolExecutionResult;
 import com.example.demo.repository.TenantToolConfigRepository;
+import com.example.demo.repository.TenantCapabilityRepository;
+import com.example.demo.model.TenantCapability;
 
 import org.springframework.stereotype.Service;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.util.StringUtils;
 
 @Service
@@ -26,18 +29,32 @@ public class ToolRegistryService {
     private final TenantToolConfigRepository tenantToolConfigRepository;
     private final FlowelleToolClient flowelleToolClient;
     private final PlatformMetrics platformMetrics;
+    private final TenantCapabilityRepository tenantCapabilityRepository;
+
+    @Autowired
+    public ToolRegistryService(
+            TenantToolConfigRepository tenantToolConfigRepository,
+            FlowelleToolClient flowelleToolClient,
+            PlatformMetrics platformMetrics,
+            TenantCapabilityRepository tenantCapabilityRepository) {
+        this.tenantToolConfigRepository = tenantToolConfigRepository;
+        this.flowelleToolClient = flowelleToolClient;
+        this.platformMetrics = platformMetrics;
+        this.tenantCapabilityRepository = tenantCapabilityRepository;
+    }
 
     public ToolRegistryService(
             TenantToolConfigRepository tenantToolConfigRepository,
             FlowelleToolClient flowelleToolClient,
             PlatformMetrics platformMetrics) {
-        this.tenantToolConfigRepository = tenantToolConfigRepository;
-        this.flowelleToolClient = flowelleToolClient;
-        this.platformMetrics = platformMetrics;
+        this(tenantToolConfigRepository, flowelleToolClient, platformMetrics, null);
     }
 
     public ToolExecutionResult executeTools(Tenant tenant, ChatSession session, ChatCommand command) {
-        Set<String> toolNames = detectToolNames(command.message());
+        Set<String> toolNames = detectConfiguredToolNames(tenant, command.message(), command.scopes());
+        if (toolNames.isEmpty()) {
+            toolNames = detectToolNames(command.message());
+        }
         if (toolNames.isEmpty()) {
             return ToolExecutionResult.empty();
         }
@@ -105,10 +122,13 @@ public class ToolRegistryService {
                 return;
             }
             String summary = firstText(response.userExplanation(), response.summary(), "Host tool returned context.");
-            if (isSuccess(response.status())) {
-                toolCalls.add(new ToolCallResponse(toolConfig.getName(), "COMPLETED", summary));
-                platformMetrics.recordToolOutcome(tenant.getSlug(), toolConfig.getName(), "COMPLETED");
-                promptContexts.add(promptContext(toolConfig.getName(), response));
+            if (isSuccess(response.status()) || isNoData(response.status())) {
+                String outcome = isNoData(response.status()) ? "NO_DATA" : "COMPLETED";
+                toolCalls.add(new ToolCallResponse(toolConfig.getName(), outcome, summary));
+                platformMetrics.recordToolOutcome(tenant.getSlug(), toolConfig.getName(), outcome);
+                if (!isNoData(response.status())) {
+                    promptContexts.add(promptContext(toolConfig.getName(), response));
+                }
             } else {
                 toolCalls.add(new ToolCallResponse(toolConfig.getName(), "FAILED", summary));
                 platformMetrics.recordToolOutcome(tenant.getSlug(), toolConfig.getName(), "FAILED");
@@ -169,6 +189,12 @@ public class ToolRegistryService {
                     flowelleToolClient.fetchCycleSummary(tenant, session, command, toolConfig, requestScopes);
             case FlowelleToolClient.USER_PREFERENCES_TOOL ->
                     flowelleToolClient.fetchUserPreferences(tenant, session, command, toolConfig, requestScopes);
+            case FlowelleToolClient.NUTRITION_PROFILE_TOOL ->
+                    flowelleToolClient.fetchNutritionProfile(tenant, session, command, toolConfig, requestScopes);
+            case FlowelleToolClient.EXERCISE_PROFILE_TOOL ->
+                    flowelleToolClient.fetchExerciseProfile(tenant, session, command, toolConfig, requestScopes);
+            case FlowelleToolClient.SIGNALS_TOOL ->
+                    flowelleToolClient.fetchSignals(tenant, session, command, toolConfig, requestScopes);
             default -> throw new HostToolClientException("Unsupported Flowelle tool: " + toolConfig.getName(), null);
         };
     }
@@ -179,6 +205,32 @@ public class ToolRegistryService {
         }
         String normalized = status.toUpperCase(Locale.ROOT);
         return "OK".equals(normalized) || "SUCCESS".equals(normalized) || "COMPLETED".equals(normalized);
+    }
+
+    private boolean isNoData(String status) {
+        return StringUtils.hasText(status) && "NO_DATA".equalsIgnoreCase(status);
+    }
+
+    private Set<String> detectConfiguredToolNames(Tenant tenant, String message, Set<String> requestScopes) {
+        if (tenant.getId() == null || tenantCapabilityRepository == null) {
+            return Set.of();
+        }
+        Set<String> scopes = normalizeScopes(requestScopes);
+        return tenantCapabilityRepository.findByTenantIdAndActiveTrueOrderByPriorityAscCapabilityKeyAsc(tenant.getId())
+                .stream()
+                .filter(capability -> matches(capability, message))
+                .filter(capability -> scopes.containsAll(normalizeScopes(capability.getRequiredScopes())))
+                .flatMap(capability -> capability.getToolNames().stream())
+                .filter(StringUtils::hasText)
+                .collect(Collectors.toCollection(LinkedHashSet::new));
+    }
+
+    private boolean matches(TenantCapability capability, String message) {
+        String normalizedMessage = " " + message.toLowerCase(Locale.ROOT).replaceAll("[^a-z0-9]+", " ").trim() + " ";
+        return capability.getTriggerPhrases().stream().filter(StringUtils::hasText).anyMatch(phrase -> {
+            String normalizedPhrase = " " + phrase.toLowerCase(Locale.ROOT).replaceAll("[^a-z0-9]+", " ").trim() + " ";
+            return normalizedMessage.contains(normalizedPhrase);
+        });
     }
 
     private String firstText(String first, String second, String fallback) {
